@@ -1,0 +1,178 @@
+{
+  "name": "local-service",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "curriculo-dev",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "3ba917d1-9b2d-41d3-8fa4-696090ab20e0",
+      "name": "Webhook",
+      "webhookId": "add437f5-b141-4bbd-bd0c-b7833885762b"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COALESCE(stage, 'inicio') AS stage,\n       COALESCE(draft, '{}'::jsonb) AS draft,\n       COALESCE(revision, 0) AS revision\nFROM (SELECT $1::text AS sender_id) AS input\nLEFT JOIN sessions USING (sender_id);",
+        "options": {
+          "queryReplacement": "={{ [$json.sender_id] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        416,
+        0
+      ],
+      "id": "21ae1069-bb97-4ccc-a17f-d8f2e63d3a00",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "HuUiL2nVX9Er7Y38",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5ea20f97-d830-4519-945e-fec2f233dbde",
+              "name": "sender_id",
+              "value": "={{ $json.body.sender_id }}",
+              "type": "string"
+            },
+            {
+              "id": "8bef4c97-ddf3-45f0-b122-a3b33549d8e5",
+              "name": "message_id",
+              "value": "={{ $json.body.message_id }}",
+              "type": "string"
+            },
+            {
+              "id": "8b02acac-6a5c-473e-a825-35592fa7526a",
+              "name": "text",
+              "value": "={{ $json.body.text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "023d4738-dc64-47d2-a39d-4613c03ef30b",
+      "name": "Entrada"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const entrada = $('Entrada').item.json;\nconst texto = entrada.text.trim();\nconst etapa = $json.stage;\nconst draft = { ...$json.draft };\n\nlet stage = etapa;\nlet reply = 'Responda com seu nome para continuar.';\n\nif (etapa === 'inicio') {\n  stage = 'nome';\n  reply = 'Oi! Qual nome deve aparecer no currículo?';\n} else if (etapa === 'nome' && texto.length > 0 && texto.length <= 120) {\n  draft.nome = texto;\n  stage = 'contato';\n  reply = 'Qual telefone ou e-mail você quer colocar no currículo?';\n} else if (etapa === 'contato') {\n  reply = 'Já anotei seu nome. A etapa de contato será implementada a seguir.';\n}\n\nreturn { json: { sender_id: entrada.sender_id, stage, draft,\n  revision: $json.revision, reply } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        592,
+        0
+      ],
+      "id": "53b711a1-47a2-433e-80bd-cd91aded0102",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO sessions (sender_id, stage, draft, revision)\nVALUES ($1, $2, $3::jsonb, $4)\nON CONFLICT (sender_id) DO UPDATE SET\n  stage = EXCLUDED.stage, draft = EXCLUDED.draft,\n  revision = EXCLUDED.revision, updated_at = now()\nRETURNING stage, $5::text AS resposta;",
+        "options": {
+          "queryReplacement": "={{ [$json.sender_id, $json.stage, JSON.stringify($json.draft), $json.revision, $json.reply] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        784,
+        0
+      ],
+      "id": "7bc3fefc-feec-47e8-a974-5744c67b15e3",
+      "name": "Execute a SQL query1",
+      "credentials": {
+        "postgres": {
+          "id": "HuUiL2nVX9Er7Y38",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entrada": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "4392b529-4657-4d18-b74d-acbed7174e40",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "eb52c1f07e8993cecf42ef5f82679be1078a11a814155b116f731990d3cbe876"
+  },
+  "nodeGroups": [],
+  "id": "cys1lKVvdyjMlcVL",
+  "tags": []
+}
