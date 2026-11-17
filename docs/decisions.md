@@ -60,3 +60,20 @@ Este arquivo registra decisões que outra sessão precisa conhecer para retomar 
 - Correções de contato usam as mesmas validações e a normalização da coleta inicial.
 - `pular` remove campos opcionais durante uma correção; nome e contato continuam obrigatórios.
 - A confirmação salva `draft.review_status=confirmed` e avança para `ready_for_drafting`. A redação permanece separada e será a próxima etapa.
+
+## 2026-11-17 — Rascunho determinístico antes do PDF
+
+- A primeira redação usa o método técnico `deterministic_template_v1` para manter a etapa reproduzível sem credenciais de LLM.
+- O texto gerado usa somente fatos presentes no `draft` confirmado; campos ausentes aparecem como `Não informado`.
+- O preview fica em `draft.generated_resume` com `status=preview`; a aprovação muda para `status=approved` e o estado `draft_approved`.
+- Qualquer correção após a geração invalida o preview e exige nova revisão e confirmação.
+- A integração com LLM será uma decisão posterior, depois que o contrato factual e a geração de PDF estiverem verificados.
+
+## 2026-11-17 — PDF local com Gotenberg
+
+- A primeira etapa de PDF usa HTML determinístico e o endpoint interno do serviço `gotenberg`; não há chamada a LLM nem a canal externo.
+- O HTML é montado somente com `draft.generated_resume.text`, com escape de caracteres antes de entrar no documento.
+- O pedido é representado por `pdf_status=requested`, `pdf_filename` e pelos campos transitórios `pdf_html`, `pdf_multipart_body` e `pdf_requested`.
+- O workflow usa um node `If` para não chamar o conversor quando a mensagem não pede PDF. O node HTTP espera o binário em `data`.
+- A execução MCP foi feita com pin data no node HTTP; esse resultado é uma simulação do contrato de saída, não uma prova de que o Gotenberg gerou um PDF.
+- A próxima validação deve remover o pin, executar contra o serviço real e inspecionar o binário/visualização antes de escolher armazenamento e entrega.
