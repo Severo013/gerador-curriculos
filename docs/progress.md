@@ -718,4 +718,50 @@ O endpoint interno está fixado em `http://localhost:5678` porque o laboratório
 
 ### Próxima etapa sugerida
 
-Publicar esta versão do `local-service` somente quando a resposta segura estiver aprovada e, em seguida, criar o adaptador de entrega em modo dry-run para preparar o documento sem enviá-lo a um canal real.
+Esta sugestão foi concluída na seção seguinte: a versão segura foi publicada e o adaptador de entrega em modo dry-run foi validado.
+## Correção da resposta publicada e adaptador dry-run — concluída em 2026-11-17
+
+### Escopo
+
+- Workflow n8n: `local-service`
+- Versão publicada testada: `47324424-0e4d-40be-aec9-76c08edd345e`
+- Estado: publicada e ativa
+- Próxima integração de canal: ainda não implementada
+
+### Correções
+
+- O caminho da conversa passou a ser sequencial: persistência, decisão de PDF, recuperação ou resposta.
+- O ramo normal termina em `Prepare Conversation Response`, evitando que um ramo vazio do `If` produza HTTP 500.
+- Os sinais `pdf_requested` e `pdf_retrieval_requested` são preservados no retorno de `Save Session`.
+- O binário `pdf_html_file` permanece no ramo de conversão do Gotenberg.
+- `Prepare Dry-Run Delivery` prepara um payload seguro com `sender_id`, `artifact_id`, `grant_id`, expiração, MIME e endpoint, sem enviar a nenhum canal.
+- O payload marca `send_attempted=false` e não contém `download_token`.
+
+### Testes executados
+
+| Teste | Resultado |
+|---|---|
+| Conversa completa via Postman CLI, 12 mensagens fictícias | PASS; todas as respostas 2xx e etapa final `delivery_status=ready` |
+| Verificação da resposta final | PASS; `delivery_mode=dry_run`, payload presente, sem token bruto |
+| Collection `curriculo` via Postman CLI | PASS; 5 requests, 7 asserções, 0 falhas |
+| Concessão, download, revogação e bloqueios | 201, 200 com `application/pdf`, 200, 403 e 403 |
+| Teste pinado do workflow pelo MCP n8n | PASS; último node `Prepare Dry-Run Delivery` |
+
+Os dados foram fictícios. Nenhum envio para WhatsApp, Telegram, e-mail ou outro canal externo foi realizado.
+
+### Como reproduzir
+
+1. Execute a conversa pelo endpoint publicado `POST /webhook/curriculo-dev` com um `sender_id` novo.
+2. Use a sequência `oi`, nome, e-mail, objetivo, `primeiro emprego`, três `pular`, `confirmar`, `gerar curriculo`, `aprovar` e `gerar PDF`.
+3. Verifique na última resposta `delivery_status=ready`, `delivery_mode=dry_run`, `delivery_payload.send_attempted=false` e ausência de `download_token`.
+4. Execute a collection local com `--env-var download_auth_token=testedev` para repetir os testes de concessão e download.
+
+### Próxima etapa
+
+Definir o contrato do primeiro canal real e implementar somente após aprovação explícita; o adaptador atual continua em modo simulado.
+3. Verifique na última resposta `delivery_status=ready`, `delivery_mode=dry_run`, `delivery_payload.send_attempted=false` e ausência de `download_token`.
+4. Execute a collection local com `--env-var download_auth_token=testedev` para repetir os testes de concessão e download.
+
+### Próxima etapa
+
+Definir o contrato do primeiro canal real e implementar somente após aprovação explícita; o adaptador atual continua em modo simulado.

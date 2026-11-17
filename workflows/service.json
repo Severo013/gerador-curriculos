@@ -51,9 +51,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO sessions (sender_id, stage, draft, revision)\nVALUES ($1, $2, $3::jsonb, $4)\nON CONFLICT (sender_id) DO UPDATE SET\n  stage = EXCLUDED.stage,\n  draft = EXCLUDED.draft,\n  revision = EXCLUDED.revision,\n  updated_at = now()\nRETURNING stage, draft, revision, $5::text AS response;",
+        "query": "INSERT INTO sessions (sender_id, stage, draft, revision)\nVALUES ($1, $2, $3::jsonb, $4)\nON CONFLICT (sender_id) DO UPDATE SET\n  stage = EXCLUDED.stage,\n  draft = EXCLUDED.draft,\n  revision = EXCLUDED.revision,\n  updated_at = now()\nRETURNING\n  $1::text AS sender_id,\n  stage,\n  draft,\n  revision,\n  $5::text AS response,\n  $6::boolean AS pdf_requested,\n  $7::boolean AS pdf_retrieval_requested;",
         "options": {
-          "queryReplacement": "={{ [$json.sender_id, $json.stage, JSON.stringify($json.draft), $json.revision, $json.reply] }}"
+          "queryReplacement": "={{ [$json.sender_id, $json.stage, JSON.stringify($json.draft), $json.revision, $json.reply, $json.pdf_requested, $json.pdf_retrieval_requested] }}"
         }
       },
       "type": "n8n-nodes-base.postgres",
@@ -324,6 +324,36 @@
         "language": "javaScript",
         "jsCode": "const raw = $input.item.json;\nconst grant = raw.body && typeof raw.body === 'object' ? raw.body : raw;\nconst statusCode = Number(raw.statusCode ?? grant.status_code ?? 500);\nconst senderId = String(grant.sender_id ?? raw.sender_id ?? '');\nconst artifactId = String(grant.artifact_id ?? raw.artifact_id ?? '');\n\nif (statusCode !== 201 || grant.grant_created !== true) {\n  return {\n    json: {\n      sender_id: senderId,\n      stage: 'pdf_requested',\n      draft: {\n        pdf_status: 'stored',\n        pdf_artifact_id: artifactId || null,\n      },\n      delivery_status: 'failed',\n      artifact_id: artifactId || null,\n      grant_id: null,\n      grant_expires_at: null,\n      download_endpoint_path: '/webhook/curriculo-pdf-dev',\n      status_code: statusCode,\n      reply: 'PDF foi armazenado, mas a concessão temporária não pôde ser criada.',\n    },\n  };\n}\n\nreturn {\n  json: {\n    sender_id: senderId,\n    stage: 'pdf_requested',\n    draft: {\n      pdf_status: 'stored',\n      pdf_artifact_id: artifactId,\n    },\n    delivery_status: 'ready',\n    artifact_id: artifactId,\n    grant_id: grant.grant_id,\n    grant_expires_at: grant.expires_at,\n    download_endpoint_path: '/webhook/curriculo-pdf-dev',\n    status_code: 201,\n    reply: 'PDF pronto para entrega. Concessão temporária criada.',\n  },\n};"
       }
+    },
+    {
+      "id": "67c695ee-2b51-4586-b84e-517b99d3fd30",
+      "name": "Prepare Conversation Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1248,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $input.item.json;\nconst response = input.response ?? input.reply ?? '';\n\nreturn {\n  json: {\n    sender_id: input.sender_id ?? '',\n    stage: input.stage ?? 'start',\n    draft: input.draft ?? {},\n    revision: Number(input.revision ?? 0),\n    reply: response,\n    response,\n  },\n};"
+      }
+    },
+    {
+      "id": "702157ff-8727-4622-975f-8b7b91c755db",
+      "name": "Prepare Dry-Run Delivery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2688,
+        224
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $input.item.json;\nconst ready = input.delivery_status === 'ready';\nconst artifactId = input.artifact_id ? String(input.artifact_id) : null;\nconst fileNameMatch = artifactId?.match(/-([a-z0-9-]+\\.pdf)$/i);\nconst deliveryPayload = ready\n  ? {\n      mode: 'dry_run',\n      action: 'send_document',\n      sender_id: input.sender_id ?? null,\n      artifact_id: artifactId,\n      grant_id: input.grant_id ?? null,\n      grant_expires_at: input.grant_expires_at ?? null,\n      file_name: fileNameMatch?.[1] ?? 'curriculo.pdf',\n      mime_type: 'application/pdf',\n      download_endpoint_path: input.download_endpoint_path ?? '/webhook/curriculo-pdf-dev',\n      send_attempted: false,\n    }\n  : null;\n\nreturn {\n  json: {\n    ...input,\n    delivery_mode: 'dry_run',\n    delivery_payload: deliveryPayload,\n    send_attempted: false,\n    reply: ready\n      ? 'PDF preparado para entrega simulada; nenhum envio externo foi realizado.'\n      : input.reply,\n  },\n};"
+      }
     }
   ],
   "connections": {
@@ -372,11 +402,6 @@
             "node": "Check PDF Request",
             "type": "main",
             "index": 0
-          },
-          {
-            "node": "Check PDF Retrieval",
-            "type": "main",
-            "index": 0
           }
         ]
       ]
@@ -386,6 +411,13 @@
         [
           {
             "node": "Convert PDF with Gotenberg",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check PDF Retrieval",
             "type": "main",
             "index": 0
           }
@@ -425,6 +457,35 @@
         ]
       ]
     },
+    "Check PDF Retrieval": {
+      "main": [
+        [
+          {
+            "node": "Load PDF Artifact",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Conversation Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load PDF Artifact": {
+      "main": [
+        [
+          {
+            "node": "Prepare PDF Download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Save PDF Metadata": {
       "main": [
         [
@@ -447,22 +508,11 @@
         ]
       ]
     },
-    "Check PDF Retrieval": {
+    "Prepare Delivery Response": {
       "main": [
         [
           {
-            "node": "Load PDF Artifact",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Load PDF Artifact": {
-      "main": [
-        [
-          {
-            "node": "Prepare PDF Download",
+            "node": "Prepare Dry-Run Delivery",
             "type": "main",
             "index": 0
           }

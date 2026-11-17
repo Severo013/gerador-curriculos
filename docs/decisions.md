@@ -193,3 +193,20 @@ Este arquivo registra decisões que outra sessão precisa conhecer para retomar 
 - A URL interna usa `http://localhost:5678/webhook/curriculo-grant-dev`, adequada ao laboratório atual. Antes de mover o n8n para outro ambiente, essa base deve virar uma variável de configuração.
 - A alteração ficou no rascunho do `local-service`; não houve nova publicação nem envio externo.
 - O espelho sanitizado da versão testada está em `workflows/service.json`, sem credenciais, tokens, `pinData` ou `webhookId`.
+
+## 2026-11-17 — Resposta HTTP determinística e entrega dry-run
+
+- O workflow publicado apresentou `500 No item to return was found` porque os dois nodes `If` tinham ramos falsos sem conexão e `responseMode=lastNode` escolhia uma saída vazia.
+- O grafo foi reencadeado para manter a persistência e a decisão de PDF em um fluxo determinístico. O ramo normal termina em `Prepare Conversation Response`; o ramo de PDF mantém o binário HTML até o Gotenberg.
+- `Save Session` retorna também `pdf_requested` e `pdf_retrieval_requested`, evitando perder os sinais de roteamento após a persistência.
+- A versão `47324424-0e4d-40be-aec9-76c08edd345e` foi publicada depois de teste pinado pelo MCP e de uma conversa completa via Postman CLI.
+- O node `Prepare Dry-Run Delivery` cria somente um envelope seguro para um futuro canal: `delivery_mode=dry_run`, `send_attempted=false`, identificadores do artefato/concessão e metadados do PDF. Não há chamada de envio.
+- A conversa publicada terminou com `delivery_status=ready` e sem `download_token`. A collection `curriculo` passou com 5 requests e 7 asserções.
+- A saída versionada em `workflows/service.json` foi regenerada a partir do export da versão publicada, removendo credenciais, `pinData` e `webhookId`.
+- O envio para WhatsApp, Telegram, e-mail ou qualquer canal real continua fora do escopo até uma solicitação explícita.
+- `Save Session` retorna também `pdf_requested` e `pdf_retrieval_requested`, evitando perder os sinais de roteamento após a persistência.
+- A versão `47324424-0e4d-40be-aec9-76c08edd345e` foi publicada depois de teste pinado pelo MCP e de uma conversa completa via Postman CLI.
+- O node `Prepare Dry-Run Delivery` cria somente um envelope seguro para um futuro canal: `delivery_mode=dry_run`, `send_attempted=false`, identificadores do artefato/concessão e metadados do PDF. Não há chamada de envio.
+- A conversa publicada terminou com `delivery_status=ready` e sem `download_token`. A collection `curriculo` passou com 5 requests e 7 asserções.
+- A saída versionada em `workflows/service.json` foi regenerada a partir do export da versão publicada, removendo credenciais, `pinData` e `webhookId`.
+- O envio para WhatsApp, Telegram, e-mail ou qualquer canal real continua fora do escopo até uma solicitação explícita.
