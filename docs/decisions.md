@@ -52,3 +52,11 @@ Este arquivo registra decisões que outra sessão precisa conhecer para retomar 
 - A etapa `skills` aceita uma resposta livre de 2 a 300 caracteres e salva uma lista em `draft.skills`. Nesta etapa, a lista contém o relato original e ainda não normaliza habilidades.
 - Nas três etapas, `pular`, `não tenho` e `nao tenho` deixam o campo ausente e avançam para a próxima etapa.
 - Depois de habilidades, o estado `review_data` é apenas um marcador. A conferência, correção e confirmação dos dados serão implementadas na próxima etapa.
+
+## 2026-11-17 — Revisão e confirmação dos dados
+
+- `review_data` apresenta um resumo determinístico dos fatos coletados; não há geração por IA nem enriquecimento automático.
+- A correção é iniciada por `corrigir`, `editar` ou `alterar` seguido de um campo. O campo pendente fica em `draft.pending_review_field` apenas durante a edição.
+- Correções de contato usam as mesmas validações e a normalização da coleta inicial.
+- `pular` remove campos opcionais durante uma correção; nome e contato continuam obrigatórios.
+- A confirmação salva `draft.review_status=confirmed` e avança para `ready_for_drafting`. A redação permanece separada e será a próxima etapa.

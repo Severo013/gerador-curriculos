@@ -35,7 +35,7 @@ As três execuções terminaram com status `success`. Os dados são inteiramente
 
 ### Próxima entrega sugerida
 
-Implementar a revisão dos dados coletados, com resumo legível, correção por campo e confirmação antes da redação.
+Implementar a redação assistida do currículo a partir do rascunho confirmado, sem inventar informações.
 
 ## Contato e objetivo — concluída em 2026-11-16
 
@@ -154,3 +154,38 @@ Todas as 27 execuções foram feitas com dados fictícios e terminaram com statu
 4. Em `skills`, repita com `x` e depois uma lista de habilidades.
 5. Confirme que o último retorno está em `review_data` e que o rascunho contém `education`, `courses` e `skills`.
 6. Para o caminho opcional, responda `pular` nas três perguntas e confirme que os campos são omitidos.
+
+## Revisão e confirmação dos dados — concluída em 2026-11-17
+
+### Escopo
+
+- Workflow n8n: `local-service`
+- Versão de rascunho testada: `94d2c08a-57c7-40ae-b02a-8bc3a58dd14d`
+- Estado de publicação: o rascunho foi testado; nenhuma publicação nova foi solicitada ou realizada.
+
+### Alterações
+
+- O estado `review_data` mostra um resumo em português com nome, contato, objetivo, experiência, escolaridade, cursos e habilidades.
+- `corrigir <campo>`, `editar <campo>` e `alterar <campo>` abrem a edição de `nome`, `contato`, `objetivo`, `experiência`, `escolaridade`, `cursos` ou `habilidades`.
+- Cada correção reutiliza as validações do campo; contatos continuam sendo normalizados.
+- Campos opcionais podem ser removidos respondendo `pular` durante a correção.
+- `confirmar`, `confirmado`, `sim` ou `ok` registram `draft.review_status=confirmed` e avançam para `ready_for_drafting`.
+- A redação do currículo ainda não é executada nesta etapa.
+
+### Testes fictícios via MCP
+
+| Execuções | Caminho | Resultado observado |
+|---|---|---|
+| `93`–`103` | Renata Revisão chega ao resumo, corrige `cursos` e confirma | `100` mostrou o resumo; `101` abriu `review_edit`; `102` salvou `Curso de Excel avançado`; `103` terminou em `ready_for_drafting` com `review_status=confirmed`. |
+| `104`–`109` | A mesma sessão tenta corrigir contato com `x`, envia telefone válido, remove objetivo e confirma novamente | `105` permaneceu em `review_edit`; `106` normalizou o telefone para `+5511988887777`; `108` removeu o objetivo; `109` confirmou novamente. |
+
+Todas as 17 execuções finais terminaram com status `success` e usaram dados fictícios. O primeiro ensaio `82`–`92` foi interrompido por um erro de sintaxe no alias `e-mail`; o alias foi corrigido, validado e não houve persistência dessas execuções.
+
+### Como reproduzir
+
+1. Use um `sender_id` novo e avance até `review_data`.
+2. Confirme que o bot exibe o resumo e aceita `corrigir cursos`.
+3. Envie um valor inválido para um contato durante `review_edit` e confirme que a etapa não avança.
+4. Envie um telefone válido e confirme a normalização.
+5. Responda `corrigir objetivo` e depois `pular` para remover o campo.
+6. Responda `confirmar` e confirme o estado `ready_for_drafting` e `draft.review_status=confirmed`.
