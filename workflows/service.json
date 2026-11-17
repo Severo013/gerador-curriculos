@@ -21,7 +21,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT COALESCE(stage, 'inicio') AS stage,\n       COALESCE(draft, '{}'::jsonb) AS draft,\n       COALESCE(revision, 0) AS revision\nFROM (SELECT $1::text AS sender_id) AS input\nLEFT JOIN sessions USING (sender_id);",
+        "query": "SELECT COALESCE(stage, 'start') AS stage,\n       COALESCE(draft, '{}'::jsonb) AS draft,\n       COALESCE(revision, 0) AS revision\nFROM (SELECT $1::text AS sender_id) AS input\nLEFT JOIN sessions USING (sender_id);",
         "options": {
           "queryReplacement": "={{ [$json.sender_id] }}"
         }
@@ -33,7 +33,7 @@
         0
       ],
       "id": "21ae1069-bb97-4ccc-a17f-d8f2e63d3a00",
-      "name": "Execute a SQL query"
+      "name": "Load Session"
     },
     {
       "parameters": {
@@ -68,12 +68,12 @@
         0
       ],
       "id": "023d4738-dc64-47d2-a39d-4613c03ef30b",
-      "name": "Entrada"
+      "name": "Input"
     },
     {
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const entrada = $('Entrada').item.json;\nconst texto = entrada.text.trim();\nconst etapa = $json.stage;\nconst draft = { ...$json.draft };\n\nlet stage = etapa;\nlet reply = 'Responda com seu nome para continuar.';\n\nif (etapa === 'inicio') {\n  stage = 'nome';\n  reply = 'Oi! Qual nome deve aparecer no currículo?';\n} else if (etapa === 'nome' && texto.length > 0 && texto.length <= 120) {\n  draft.nome = texto;\n  stage = 'contato';\n  reply = 'Qual telefone ou e-mail você quer colocar no currículo?';\n} else if (etapa === 'contato') {\n  reply = 'Já anotei seu nome. A etapa de contato será implementada a seguir.';\n}\n\nreturn { json: { sender_id: entrada.sender_id, stage, draft,\n  revision: $json.revision, reply } };"
+        "jsCode": "const input = $('Input').item.json;\nconst text = String(input.text ?? '').trim();\nconst command = text.toLocaleLowerCase('pt-BR');\nconst stageAliases = {\n  inicio: 'start',\n  nome: 'name',\n  contato: 'contact',\n};\nlet stage = stageAliases[$json.stage] ?? $json.stage ?? 'start';\nconst draft = { ...($json.draft ?? {}) };\n\nif (draft.nome && !draft.name) {\n  draft.name = draft.nome;\n}\ndelete draft.nome;\n\nfunction normalizeBrazilianPhone(value) {\n  let digits = value.replace(/\\D/g, '');\n\n  if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) {\n    digits = digits.slice(2);\n  }\n\n  if (![10, 11].includes(digits.length)) {\n    return null;\n  }\n\n  if (digits.startsWith('0') || /^(\\d)\\1+$/.test(digits)) {\n    return null;\n  }\n\n  return `+55${digits}`;\n}\n\nfunction isValidEmail(value) {\n  return value.length <= 254 && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$/.test(value);\n}\n\nlet reply = 'Responda com seu nome para continuar.';\n\nif (stage === 'start') {\n  stage = 'name';\n  reply = 'Oi! Qual nome deve aparecer no currículo?';\n} else if (stage === 'name') {\n  if (text.length > 0 && text.length <= 120) {\n    draft.name = text;\n    stage = 'contact';\n    reply = 'Qual telefone ou e-mail você quer colocar no currículo?';\n  } else {\n    reply = 'Envie um nome com até 120 caracteres para continuar.';\n  }\n} else if (stage === 'contact') {\n  const normalizedPhone = normalizeBrazilianPhone(text);\n\n  if (isValidEmail(text)) {\n    draft.contact = {\n      type: 'email',\n      value: text,\n      normalized: text.toLocaleLowerCase('pt-BR'),\n    };\n    stage = 'objective';\n    reply = 'Que tipo de trabalho você procura? Se preferir, responda \"pular\".';\n  } else if (normalizedPhone) {\n    draft.contact = {\n      type: 'phone',\n      value: text,\n      normalized: normalizedPhone,\n    };\n    stage = 'objective';\n    reply = 'Que tipo de trabalho você procura? Se preferir, responda \"pular\".';\n  } else {\n    reply = 'Não reconheci esse contato. Envie um telefone com DDD ou um e-mail válido.';\n  }\n} else if (stage === 'objective') {\n  if (command === 'pular') {\n    delete draft.objective;\n    stage = 'experience';\n    reply = 'Você já trabalhou, fez algum bico ou ajudou em um negócio da família? Conte o que fazia ou responda \"primeiro emprego\".';\n  } else if (text.length >= 2 && text.length <= 160) {\n    draft.objective = text;\n    stage = 'experience';\n    reply = 'Você já trabalhou, fez algum bico ou ajudou em um negócio da família? Conte o que fazia ou responda \"primeiro emprego\".';\n  } else {\n    reply = 'Descreva o objetivo em até 160 caracteres ou responda \"pular\".';\n  }\n} else if (stage === 'experience') {\n  reply = 'A etapa de experiência será implementada a seguir.';\n} else {\n  reply = 'Não consegui identificar a etapa atual. Tente novamente.';\n}\n\nreturn {\n  json: {\n    sender_id: input.sender_id,\n    stage,\n    draft,\n    revision: $json.revision,\n    reply,\n  },\n};"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -82,12 +82,12 @@
         0
       ],
       "id": "53b711a1-47a2-433e-80bd-cd91aded0102",
-      "name": "Code in JavaScript"
+      "name": "Process Conversation"
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO sessions (sender_id, stage, draft, revision)\nVALUES ($1, $2, $3::jsonb, $4)\nON CONFLICT (sender_id) DO UPDATE SET\n  stage = EXCLUDED.stage, draft = EXCLUDED.draft,\n  revision = EXCLUDED.revision, updated_at = now()\nRETURNING stage, $5::text AS resposta;",
+        "query": "INSERT INTO sessions (sender_id, stage, draft, revision)\nVALUES ($1, $2, $3::jsonb, $4)\nON CONFLICT (sender_id) DO UPDATE SET\n  stage = EXCLUDED.stage,\n  draft = EXCLUDED.draft,\n  revision = EXCLUDED.revision,\n  updated_at = now()\nRETURNING stage, draft, revision, $5::text AS response;",
         "options": {
           "queryReplacement": "={{ [$json.sender_id, $json.stage, JSON.stringify($json.draft), $json.revision, $json.reply] }}"
         }
@@ -99,7 +99,7 @@
         0
       ],
       "id": "7bc3fefc-feec-47e8-a974-5744c67b15e3",
-      "name": "Execute a SQL query1"
+      "name": "Save Session"
     }
   ],
   "connections": {
@@ -107,40 +107,40 @@
       "main": [
         [
           {
-            "node": "Entrada",
+            "node": "Input",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Entrada": {
+    "Input": {
       "main": [
         [
           {
-            "node": "Execute a SQL query",
+            "node": "Load Session",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Execute a SQL query": {
+    "Load Session": {
       "main": [
         [
           {
-            "node": "Code in JavaScript",
+            "node": "Process Conversation",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Code in JavaScript": {
+    "Process Conversation": {
       "main": [
         [
           {
-            "node": "Execute a SQL query1",
+            "node": "Save Session",
             "type": "main",
             "index": 0
           }
@@ -154,7 +154,7 @@
     "binaryMode": "separate",
     "availableInMCP": true
   },
-  "versionId": "faf176c4-d60d-46c5-85a9-3ce249d37f01",
+  "versionId": "895e3c1f-376e-4593-87c1-c6219deac636",
   "nodeGroups": [],
   "id": "cys1lKVvdyjMlcVL",
   "tags": []

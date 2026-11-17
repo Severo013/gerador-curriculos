@@ -28,3 +28,11 @@ Este arquivo registra decisões que outra sessão precisa conhecer para retomar 
 - Referências a credenciais da instância, metadados locais e dados fixados de teste não entram no arquivo versionado.
 - Ao importar o JSON, a credencial PostgreSQL precisa ser selecionada novamente nos dois nodes de banco.
 - O MCP disponível não possui uma operação de export reimportável. Quando houver uma alteração estrutural, o workflow `local-service` deve ser baixado pela interface e revisado antes do commit.
+
+## 2026-11-16 — Representação de contato e objetivo
+
+- `draft.contact` é um objeto com `type`, `value` e `normalized`.
+- Telefones brasileiros aceitos são persistidos também no formato normalizado `+55` com DDD; o valor digitado é preservado para conferência humana.
+- E-mails são preservados como digitados e normalizados para minúsculas.
+- O objetivo aceita de 2 a 160 caracteres. Quando a pessoa responde `pular`, a propriedade `draft.objective` é omitida.
+- Estados e campos novos usam inglês. Registros legados com `inicio`, `nome`, `contato` e `draft.nome` são convertidos quando a conversa volta a ser processada.

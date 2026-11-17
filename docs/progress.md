@@ -35,4 +35,46 @@ As três execuções terminaram com status `success`. Os dados são inteiramente
 
 ### Próxima entrega sugerida
 
-Implementar e validar a coleta de contato e objetivo, incluindo entradas inválidas e a opção `pular` para objetivo.
+Implementar a coleta de experiências, incluindo primeiro emprego, experiência informal e mais de uma experiência.
+
+## Contato e objetivo — concluída em 2026-11-16
+
+### Escopo
+
+- Workflow n8n: `local-service`
+- Versão testada: `895e3c1f-376e-4593-87c1-c6219deac636`
+- Estado de publicação: rascunho, sem versão publicada
+
+### Alterações
+
+- Nodes técnicos foram normalizados para `Input`, `Load Session`, `Process Conversation` e `Save Session`.
+- Estados técnicos foram normalizados para `start`, `name`, `contact`, `objective` e `experience`.
+- Telefone brasileiro com DDD e e-mail passaram a ser validados e normalizados.
+- Contatos inválidos permanecem na etapa `contact` sem alterar o rascunho.
+- Objetivos entre 2 e 160 caracteres são persistidos; entradas inválidas permanecem em `objective`.
+- O comando `pular` ignora o objetivo e avança para `experience`.
+- Estados e o campo de nome da baseline em português são migrados durante a leitura.
+
+### Testes fictícios via MCP
+
+| Execuções | Caminho | Resultado observado |
+|---|---|---|
+| `13`–`14` | Início e nome de Ana Fictícia | Avançou de `name` para `contact`. |
+| `15`–`16` | Telefone curto e e-mail incompleto | Permaneceu em `contact`, sem contato salvo. |
+| `17` | Telefone `(11) 98765-4321` | Avançou para `objective`; normalizado para `+5511987654321`. |
+| `18` | Objetivo com um caractere | Permaneceu em `objective`, sem objetivo salvo. |
+| `19` | Objetivo `Atendimento ao cliente` | Avançou para `experience` com o objetivo salvo. |
+| `20`–`22` | Início, nome e e-mail de Bruno Exemplo | E-mail validado e normalizado para minúsculas; avançou para `objective`. |
+| `23` | Comando `PULAR` | Avançou para `experience` sem propriedade `objective`. |
+| `24` | Sessão legada em `contato` com `draft.nome` | Migrou para `objective` com `draft.name` e preservou o nome. |
+
+Todas as 12 execuções terminaram com status `success`. Os dados são fictícios e nenhuma API externa foi chamada.
+
+### Como reproduzir
+
+1. Use um `sender_id` novo e envie `Oi`, um nome e depois contatos inválidos como `12345` e `ana@exemplo`.
+2. Confirme que o estado continua em `contact` e que `draft.contact` não existe.
+3. Envie um telefone brasileiro com DDD e confirme o estado `objective` e o campo normalizado.
+4. Envie um objetivo com um caractere e confirme que o estado não muda.
+5. Envie um objetivo válido e confirme o estado `experience`.
+6. Com outro `sender_id`, avance usando um e-mail válido e responda `PULAR`; confirme que não existe `draft.objective`.
