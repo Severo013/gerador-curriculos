@@ -33,13 +33,7 @@
         0
       ],
       "id": "21ae1069-bb97-4ccc-a17f-d8f2e63d3a00",
-      "name": "Execute a SQL query",
-      "credentials": {
-        "postgres": {
-          "id": "HuUiL2nVX9Er7Y38",
-          "name": "Postgres account"
-        }
-      }
+      "name": "Execute a SQL query"
     },
     {
       "parameters": {
@@ -105,16 +99,9 @@
         0
       ],
       "id": "7bc3fefc-feec-47e8-a974-5744c67b15e3",
-      "name": "Execute a SQL query1",
-      "credentials": {
-        "postgres": {
-          "id": "HuUiL2nVX9Er7Y38",
-          "name": "Postgres account"
-        }
-      }
+      "name": "Execute a SQL query1"
     }
   ],
-  "pinData": {},
   "connections": {
     "Webhook": {
       "main": [
@@ -167,11 +154,7 @@
     "binaryMode": "separate",
     "availableInMCP": true
   },
-  "versionId": "4392b529-4657-4d18-b74d-acbed7174e40",
-  "meta": {
-    "templateCredsSetupCompleted": true,
-    "instanceId": "eb52c1f07e8993cecf42ef5f82679be1078a11a814155b116f731990d3cbe876"
-  },
+  "versionId": "faf176c4-d60d-46c5-85a9-3ce249d37f01",
   "nodeGroups": [],
   "id": "cys1lKVvdyjMlcVL",
   "tags": []
