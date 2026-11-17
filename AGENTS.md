@@ -1,39 +1,48 @@
-# Repository Guidelines
+# Diretrizes do repositório
 
-## Project Structure & Module Organization
+## Estrutura do projeto e organização dos módulos
 
-This repository defines the local infrastructure for a résumé-generation workflow.
+Este repositório define a infraestrutura local de um fluxo de geração de currículos.
 
-- `compose.yaml` declares the n8n automation service, PostgreSQL 17 database, and Gotenberg document-conversion service.
-- `migrations/` contains ordered PostgreSQL schema changes. `001_sessions.sql` creates the workflow session state table.
-- Docker named volumes (`n8n_data` and `bot_db`) preserve local service data and are not source-controlled assets.
+- `compose.yaml` declara o serviço de automação n8n, o banco PostgreSQL 17 e o serviço de conversão de documentos Gotenberg.
+- `migrations/` contém alterações ordenadas do schema PostgreSQL. `001_sessions.sql` cria a tabela de estado das sessões do workflow.
+- Os volumes Docker nomeados (`n8n_data` e `bot_db`) preservam os dados locais dos serviços e não são ativos versionados.
 
-Add application code in a clearly named top-level directory such as `src/`, and place automated tests in `tests/` or beside source files using a consistent suffix.
+Adicione código da aplicação em um diretório de nível superior com nome claro, como `src/`, e coloque testes automatizados em `tests/` ou ao lado dos arquivos-fonte usando um sufixo consistente.
 
-## Build, Test, and Development Commands
+## Idioma do projeto
 
-Run commands from the repository root:
+- Use inglês para código e artefatos técnicos: nomes de arquivos técnicos, diretórios, variáveis, funções, classes, nodes do n8n, campos, estados, tabelas, colunas, chaves de configuração e mensagens de commit.
+- Use português do Brasil para conteúdo destinado à leitura humana: documentação, registros de decisões, instruções operacionais, comentários explicativos, mensagens do bot e textos de interface.
+- Preserve nomes impostos por ferramentas ou padrões externos, como `AGENTS.md`, `README.md` e nomes oficiais de APIs.
+- Ao alterar uma área que contenha identificadores técnicos antigos em português, normalize-os para inglês apenas quando a mudança puder ser migrada e testada na mesma etapa.
 
-- `docker compose config` validates and renders the Compose configuration.
-- `docker compose up -d` starts n8n, PostgreSQL, and Gotenberg in the background.
-- `docker compose logs -f [service]` follows all logs or those for one service.
-- `docker compose down` stops the stack while preserving named volumes.
-- `Get-Content migrations/001_sessions.sql | docker compose exec -T postgres psql -U bot -d curriculo` applies the current migration from PowerShell.
+## Comandos de build, teste e desenvolvimento
 
-Do not use `docker compose down -v` unless intentionally deleting all local n8n and database data.
+Execute os comandos a partir da raiz do repositório:
 
-## Coding Style & Naming Conventions
+- `docker compose config` valida e renderiza a configuração do Compose.
+- `docker compose up -d` inicia n8n, PostgreSQL e Gotenberg em segundo plano.
+- `docker compose logs -f [service]` acompanha todos os logs ou os de um serviço específico.
+- `docker compose down` interrompe a stack preservando os volumes nomeados.
+- `Get-Content migrations/001_sessions.sql | docker compose exec -T postgres psql -U bot -d curriculo` aplica a migração atual pelo PowerShell.
 
-Use two-space indentation in YAML and lowercase service, volume, table, and column names. Name SQL identifiers in `snake_case`. Keep migrations idempotent where practical and name them with a zero-padded sequence and short description, for example `002_add_session_status.sql`. Write SQL keywords in uppercase and terminate statements with semicolons.
+Não use `docker compose down -v`, a menos que a intenção seja excluir todos os dados locais do n8n e do banco.
 
-## Testing Guidelines
+## Estilo de código e convenções de nomenclatura
 
-No automated test framework or coverage target is configured yet. Before submitting changes, run `docker compose config`, start the stack, inspect `docker compose ps`, and verify affected services through their logs. Test migrations against a disposable database before applying them to persistent data.
+Use indentação de dois espaços em YAML e nomes em minúsculas para serviços, volumes, tabelas e colunas. Nomeie identificadores SQL em `snake_case`. Mantenha migrações idempotentes quando for prático e use uma sequência com zeros à esquerda e uma descrição curta em inglês, por exemplo `002_add_session_status.sql`. Escreva palavras-chave SQL em maiúsculas e encerre instruções com ponto e vírgula.
 
-## Commit & Pull Request Guidelines
+## Diretrizes de testes
 
-No Git history is available in this checkout. Use short, imperative commit subjects, optionally with Conventional Commit prefixes, such as `feat: add session status migration` or `fix: pin Gotenberg image`. Pull requests should explain the purpose, list validation commands, call out schema or configuration changes, and include screenshots only when an n8n workflow or generated document output changes.
+Ainda não há framework de testes automatizados nem meta de cobertura configurados. Antes de entregar alterações, execute `docker compose config`, inicie a stack, inspecione `docker compose ps` e verifique os serviços afetados pelos logs. Teste migrações em um banco descartável antes de aplicá-las aos dados persistentes.
 
-## Security & Configuration
+Sempre que alterar um workflow pelo MCP, teste a alteração com dados fictícios e atualize o JSON correspondente em `workflows/`. Use o export da versão testada. Se o MCP não oferecer export reimportável, identifique o workflow que precisa ser baixado pela interface. Antes do commit, revise o diff e remova dados fixados, segredos e referências locais de credenciais.
 
-The Compose file currently contains development-only database credentials. Never commit production secrets. Prefer environment variables and a gitignored `.env` file for deployable configurations, and bind externally exposed services only when required.
+## Diretrizes de commits e pull requests
+
+Use assuntos de commit curtos, imperativos e em inglês, opcionalmente com prefixos de Conventional Commits, como `feat: add session status migration` ou `fix: pin Gotenberg image`. Pull requests devem explicar o objetivo em português, listar os comandos de validação, destacar mudanças de schema ou configuração e incluir capturas de tela somente quando um workflow n8n ou documento gerado mudar.
+
+## Segurança e configuração
+
+O arquivo Compose contém atualmente credenciais de banco exclusivas para desenvolvimento. Nunca faça commit de segredos de produção. Prefira variáveis de ambiente e um arquivo `.env` ignorado pelo Git para configurações implantáveis. Exponha serviços externamente somente quando necessário.
