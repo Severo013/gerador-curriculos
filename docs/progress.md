@@ -682,3 +682,40 @@ O ambiente do Postman guarda o valor do Header Auth como variável secreta; ele 
 ### Export oficial
 
 O MCP não oferece export oficial reimportável. `workflows/pdf-grant-cleanup.json` é o espelho sanitizado da versão testada; para obter o export oficial, baixe `pdf-grant-cleanup` pela interface do n8n e associe novamente a credencial PostgreSQL.
+
+## Orquestração interna da entrega do PDF — concluída em 2026-11-17
+
+### Escopo
+
+- Workflow n8n: `local-service`
+- ID: `cys1lKVvdyjMlcVL`
+- Versão em rascunho testada: `68de2264-f475-449d-90e5-6db94c9eff9b`
+- Estado de publicação: rascunho atualizado; a versão ativa anterior não foi substituída
+
+### Alterações
+
+- `Issue Download Grant` chama `POST /webhook/curriculo-grant-dev` após a persistência do PDF.
+- A chamada usa a credencial Header Auth existente e envia `sender_id`, `artifact_id` e `ttl_seconds=900`.
+- `Prepare Delivery Response` remove o token bruto e devolve apenas metadados de entrega seguros.
+- A resposta de sucesso contém `delivery_status=ready`, `grant_id`, expiração futura, `artifact_id` e o caminho do endpoint de download.
+- A resposta de falha contém `delivery_status=failed` e não expõe detalhes do token.
+- O espelho sanitizado da versão testada está em `workflows/service.json`.
+
+### Testes fictícios via MCP
+
+| Execução | Cenário | Resultado observado |
+|---|---|---|
+| `202`–`211` | Conversa fictícia de Ana Teste até aprovação do rascunho | Todas as execuções concluídas; etapas chegaram a `draft_approved`. |
+| `212` | Primeira tentativa de gerar o PDF após a alteração | Falhou por referência pareada inválida no HTTP Request; o PDF já havia sido persistido. |
+| `213` | Reexecução após corrigir a correlação do item | `success`; `delivery_status=ready`, HTTP interno 201, `grant_id` criado, expiração futura e resposta sem `download_token`. |
+| `215` | Download usando o token somente dentro do teste | `success`; concessão `valid`, HTTP 200, MIME `application/pdf` e 12648 bytes. |
+
+Nenhuma mensagem foi enviada a canal externo. O token de 64 caracteres foi usado apenas em memória para validar o download autorizado e não apareceu na resposta `Prepare Delivery Response`.
+
+### Configuração futura
+
+O endpoint interno está fixado em `http://localhost:5678` porque o laboratório atual executa o n8n localmente. Antes de publicar essa versão em outro ambiente, substitua a base por uma variável de configuração do n8n.
+
+### Próxima etapa sugerida
+
+Publicar esta versão do `local-service` somente quando a resposta segura estiver aprovada e, em seguida, criar o adaptador de entrega em modo dry-run para preparar o documento sem enviá-lo a um canal real.

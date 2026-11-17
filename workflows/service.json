@@ -193,7 +193,7 @@
       ],
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO sessions (sender_id, stage, draft, revision)\nVALUES ($1, $2, $3::jsonb, $4)\nON CONFLICT (sender_id) DO UPDATE SET\n  stage = EXCLUDED.stage,\n  draft = EXCLUDED.draft,\n  revision = EXCLUDED.revision,\n  updated_at = now()\nRETURNING stage, draft, revision, $5::text AS response;",
+        "query": "INSERT INTO sessions (sender_id, stage, draft, revision)\nVALUES ($1, $2, $3::jsonb, $4)\nON CONFLICT (sender_id) DO UPDATE SET\n  stage = EXCLUDED.stage,\n  draft = EXCLUDED.draft,\n  revision = EXCLUDED.revision,\n  updated_at = now()\nRETURNING $1::text AS sender_id, stage, draft, revision, $5::text AS response;",
         "options": {
           "queryReplacement": "={{ [$json.sender_id, $json.stage, JSON.stringify($json.draft), $json.revision, $json.reply] }}"
         }
@@ -279,6 +279,50 @@
         "mode": "runOnceForEachItem",
         "language": "javaScript",
         "jsCode": "const input = $input.item.json;\nconst artifactId = input.artifact_id ?? input.requested_artifact_id;\n\nif (!input.artifact_id || !input.content_base64) {\n  return {\n    json: {\n      sender_id: input.sender_id,\n      pdf_artifact_id: artifactId,\n      pdf_found: false,\n      reply: 'Não encontrei um PDF armazenado para esta sessão.',\n    },\n  };\n}\n\nconst fileName = input.file_name || 'curriculo.pdf';\nconst fileExtension = fileName.split('.').pop() || 'pdf';\nconst sizeBytes = Number(input.size_bytes ?? 0);\n\nreturn {\n  json: {\n    sender_id: input.sender_id,\n    pdf_artifact_id: input.artifact_id,\n    pdf_filename: fileName,\n    pdf_mime_type: input.mime_type || 'application/pdf',\n    pdf_size_bytes: Number.isFinite(sizeBytes) ? sizeBytes : null,\n    pdf_found: true,\n    reply: 'PDF recuperado do armazenamento local.',\n  },\n  binary: {\n    data: {\n      data: input.content_base64,\n      mimeType: input.mime_type || 'application/pdf',\n      fileName,\n      fileExtension,\n      fileSize: Number.isFinite(sizeBytes) ? String(sizeBytes) : undefined,\n    },\n  },\n};"
+      }
+    },
+    {
+      "id": "b5d0b1d8-7a2b-4a4a-9bb4-3f5d9adf5e17",
+      "name": "Issue Download Grant",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2208,
+        224
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/curriculo-grant-dev",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ sender_id: $json.sender_id, artifact_id: $json.draft.pdf_artifact_id, ttl_seconds: 900 }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "0d9c1f3e-f6db-4f07-8f3f-d6a8c5f6a2e1",
+      "name": "Prepare Delivery Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2448,
+        224
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const raw = $input.item.json;\nconst grant = raw.body && typeof raw.body === 'object' ? raw.body : raw;\nconst statusCode = Number(raw.statusCode ?? grant.status_code ?? 500);\nconst senderId = String(grant.sender_id ?? raw.sender_id ?? '');\nconst artifactId = String(grant.artifact_id ?? raw.artifact_id ?? '');\n\nif (statusCode !== 201 || grant.grant_created !== true) {\n  return {\n    json: {\n      sender_id: senderId,\n      stage: 'pdf_requested',\n      draft: {\n        pdf_status: 'stored',\n        pdf_artifact_id: artifactId || null,\n      },\n      delivery_status: 'failed',\n      artifact_id: artifactId || null,\n      grant_id: null,\n      grant_expires_at: null,\n      download_endpoint_path: '/webhook/curriculo-pdf-dev',\n      status_code: statusCode,\n      reply: 'PDF foi armazenado, mas a concessão temporária não pôde ser criada.',\n    },\n  };\n}\n\nreturn {\n  json: {\n    sender_id: senderId,\n    stage: 'pdf_requested',\n    draft: {\n      pdf_status: 'stored',\n      pdf_artifact_id: artifactId,\n    },\n    delivery_status: 'ready',\n    artifact_id: artifactId,\n    grant_id: grant.grant_id,\n    grant_expires_at: grant.expires_at,\n    download_endpoint_path: '/webhook/curriculo-pdf-dev',\n    status_code: 201,\n    reply: 'PDF pronto para entrega. Concessão temporária criada.',\n  },\n};"
       }
     }
   ],
@@ -375,6 +419,28 @@
         [
           {
             "node": "Save PDF Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save PDF Metadata": {
+      "main": [
+        [
+          {
+            "node": "Issue Download Grant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Issue Download Grant": {
+      "main": [
+        [
+          {
+            "node": "Prepare Delivery Response",
             "type": "main",
             "index": 0
           }

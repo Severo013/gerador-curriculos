@@ -184,3 +184,12 @@ Este arquivo registra decisões que outra sessão precisa conhecer para retomar 
 - O Postman CLI executou a collection publicada com dados fictícios: 5 requests, 7 asserções, exit code 0. Foram observados 201 (emissão), 200 com `application/pdf` (download válido), 200 (revogação) e 403 (download revogado e sem concessão).
 - O Header Auth foi fornecido apenas por override de execução; nenhum valor secreto foi gravado nos arquivos locais ou no repositório.
 - Um ensaio isolado com token inválido retornou HTTP 403 e passou a asserção explícita de rejeição. O comando unitário do CLI encerra com código 1 para respostas 4xx esperadas; esse código não representa falha da asserção nesse caso.
+
+## 2026-11-17 — Orquestração interna da concessão após persistência do PDF
+
+- O workflow `local-service` agora chama o endpoint publicado `pdf-grant` depois de `Save PDF Metadata`, usando a credencial Header Auth já existente e TTL fixo de 900 segundos para esta etapa.
+- O novo node `Prepare Delivery Response` transforma a resposta interna em metadados seguros: `delivery_status`, `artifact_id`, `grant_id`, `grant_expires_at`, `download_endpoint_path` e `reply`. O `download_token` não é repassado nem salvo na sessão.
+- A primeira execução da alteração falhou porque o HTTP Request referenciava `$('Mark PDF Stored')` sem item pareado. A correção fez `Save PDF Metadata` retornar `sender_id` e passou a usar somente o item corrente.
+- A URL interna usa `http://localhost:5678/webhook/curriculo-grant-dev`, adequada ao laboratório atual. Antes de mover o n8n para outro ambiente, essa base deve virar uma variável de configuração.
+- A alteração ficou no rascunho do `local-service`; não houve nova publicação nem envio externo.
+- O espelho sanitizado da versão testada está em `workflows/service.json`, sem credenciais, tokens, `pinData` ou `webhookId`.
