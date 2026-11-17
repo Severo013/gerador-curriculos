@@ -35,7 +35,7 @@ As três execuções terminaram com status `success`. Os dados são inteiramente
 
 ### Próxima entrega sugerida
 
-Executar a conversão real pelo Gotenberg e verificar visualmente o PDF gerado antes de decidir onde armazenar e como entregar o arquivo.
+Persistir o PDF gerado em armazenamento local e registrar metadados suficientes para recuperá-lo, sem ainda enviar por canais externos.
 
 ## Contato e objetivo — concluída em 2026-11-16
 
@@ -229,17 +229,17 @@ Todas as 6 execuções terminaram com status `success` e usaram dados fictícios
 ### Escopo
 
 - Workflow n8n: `local-service`
-- Versão de rascunho testada: `a5838c94-91a3-4646-a62d-c3285dba923a`
+- Versão de rascunho testada: `5f8a84c2-71bd-419e-a6af-db5e5e581cd4`
 - Versão publicada preservada: `8756df6d-2dca-4df3-ba5b-0b7ef00c61fe`
 - Estado de publicação: o rascunho foi testado; nenhuma publicação nova foi solicitada ou realizada.
 
 ### Alterações
 
 - O estado `draft_approved` aceita `pdf`, `gerar PDF`, `criar PDF` e variações sem acento.
-- O Code node gera HTML determinístico escapado a partir de `draft.generated_resume.text`.
+- O Code node gera HTML determinístico escapado a partir de `draft.generated_resume.text` e cria o binário `pdf_html_file` com o nome `index.html`.
 - O pedido salva `draft.pdf_status=requested` e um nome de arquivo seguro, como `renata-revisao.pdf`.
 - O node `Check PDF Request` separa os pedidos de PDF do caminho de resposta normal.
-- O node `Convert PDF with Gotenberg` envia multipart para `http://gotenberg:3000/forms/chromium/convert/html` e espera um arquivo binário em `data`.
+- O node `Convert PDF with Gotenberg` envia `pdf_html_file` como campo binário `files` em multipart para `http://gotenberg:3000/forms/chromium/convert/html` e espera um arquivo binário em `data`.
 - O JSON versionado em `workflows/service.json` contém sete nodes e não contém credenciais, dados fixados de execução ou metadados locais.
 
 ### Testes fictícios via MCP
@@ -247,14 +247,33 @@ Todas as 6 execuções terminaram com status `success` e usaram dados fictícios
 | Execução | Caminho | Resultado observado |
 |---|---|---|
 | `116` | `aprovar` em um rascunho aprovado | Terminou com `success`; `Check PDF Request` seguiu pela saída falsa e nenhum conversor foi executado. |
-| `117` | `gerar pdf` no estado `draft_approved` | Terminou com `success`; o estado virou `pdf_requested`, o HTML e o multipart foram gerados e o nome foi `renata-revisao.pdf`. |
+| `117` | `gerar pdf` no estado `draft_approved`, com pin data | Terminou com `success`; o caminho foi validado, mas a saída do conversor era simulada. |
+| `118`–`119` | Conversão real com corpo multipart montado manualmente | Falharam com `Invalid form data: form file 'index.html' is required`; o n8n reescrevia o boundary do cabeçalho e o corpo continuava usando o boundary fixo. |
+| `120` | Conversão real com arquivo binário multipart | Terminou com `success`; Gotenberg retornou `application/pdf` em `data`, com aproximadamente 13,5 kB e nome UUID. |
 
-O retorno do node HTTP em `117` foi fixado pelo pin data do MCP como `simulated_pdf_conversion=true`. Portanto, a conversão real pelo Gotenberg ainda não foi exercitada nesta etapa.
+O retorno de `117` foi fixado pelo pin data do MCP como `simulated_pdf_conversion=true`. A execução `120` removeu essa simulação e comprovou a conversão real pelo Gotenberg. A inspeção visual foi conferida pelo usuário e considerada em ordem em 2026-11-17.
 
 ### Como reproduzir
 
 1. Use uma sessão em `draft_approved` com `draft.generated_resume.status=approved`.
 2. Execute o workflow pelo node `Webhook` com `{ "body": { "sender_id": "teste-pdf", "message_id": "pdf-01", "text": "gerar pdf" } }`.
-3. Confira em `Process Conversation` o estado `pdf_requested`, `pdf_filename`, `pdf_html` e `pdf_multipart_body`.
-4. Confira que `Check PDF Request` saiu pela porta verdadeira e que `Convert PDF with Gotenberg` recebeu o corpo multipart.
-5. Para testar a conversão de verdade, remova o pin data desse node, mantenha o Gotenberg em execução e repita a execução manual.
+3. Confira em `Process Conversation` o estado `pdf_requested`, `pdf_filename`, `pdf_html` e o binário `pdf_html_file` com nome `index.html`.
+4. Confira que `Check PDF Request` saiu pela porta verdadeira e que `Convert PDF with Gotenberg` retornou o binário `data` com MIME `application/pdf`.
+5. Para repetir a conversão real, execute o workflow manualmente sem pin data e mantenha o Gotenberg em execução.
+
+### Validação visual
+
+O PDF da execução real foi baixado e conferido manualmente; o conteúdo e a formatação foram considerados corretos. Essa conferência não foi automatizada pelo MCP.
+
+## Próxima etapa proposta — persistência local do artefato PDF
+
+### Escopo sugerido
+
+- Adicionar um armazenamento local explícito para os PDFs gerados.
+- Salvar o binário com caminho determinístico por `sender_id`, revisão e nome seguro.
+- Registrar no `draft` o estado `pdf_status=stored`, o caminho lógico, o MIME e o tamanho.
+- Manter a resposta sem envio externo; a entrega por Meta ou outro canal fica para depois.
+
+### Critério de aceite
+
+Uma execução fictícia em `draft_approved` deve gerar um PDF, persistir exatamente um arquivo local recuperável e salvar no estado da sessão os metadados correspondentes. Uma segunda solicitação deve produzir um artefato identificável sem sobrescrever silenciosamente o anterior.

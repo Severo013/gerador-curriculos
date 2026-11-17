@@ -73,7 +73,12 @@ Este arquivo registra decisões que outra sessão precisa conhecer para retomar 
 
 - A primeira etapa de PDF usa HTML determinístico e o endpoint interno do serviço `gotenberg`; não há chamada a LLM nem a canal externo.
 - O HTML é montado somente com `draft.generated_resume.text`, com escape de caracteres antes de entrar no documento.
-- O pedido é representado por `pdf_status=requested`, `pdf_filename` e pelos campos transitórios `pdf_html`, `pdf_multipart_body` e `pdf_requested`.
+- O pedido é representado por `pdf_status=requested`, `pdf_filename` e pelos campos transitórios `pdf_html` e `pdf_requested`. O HTML também é convertido em binário `pdf_html_file` com o nome `index.html`.
 - O workflow usa um node `If` para não chamar o conversor quando a mensagem não pede PDF. O node HTTP espera o binário em `data`.
-- A execução MCP foi feita com pin data no node HTTP; esse resultado é uma simulação do contrato de saída, não uma prova de que o Gotenberg gerou um PDF.
-- A próxima validação deve remover o pin, executar contra o serviço real e inspecionar o binário/visualização antes de escolher armazenamento e entrega.
+- A primeira tentativa real usou multipart montado manualmente e falhou porque o n8n reescreveu o boundary do cabeçalho. A correção usa `contentType=multipart-form-data` e um campo `formBinaryData`.
+- A execução MCP sem pin data retornou um PDF real em `data`, com MIME `application/pdf`; a visualização foi conferida manualmente e considerada correta.
+
+## 2026-11-17 — Validação visual do PDF
+
+- O PDF real foi baixado e conferido manualmente pelo usuário; conteúdo e formatação foram considerados corretos.
+- A próxima etapa é persistir o artefato localmente e registrar metadados de recuperação. Não haverá envio por Meta ou outro canal externo nessa etapa.
