@@ -1,0 +1,33 @@
+$kind: http-request
+id: cd23b2d0-1fb0-6cf5-3403-af14de8a54e4
+description: Emite uma concessão temporária para o artefato fictício do ambiente local.
+url: "{{n8n_base_url}}/webhook/curriculo-grant-dev"
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+    description: Formato do corpo.
+  - key: X-Download-Token
+    value: "{{download_auth_token}}"
+    description: Header Auth local.
+body:
+  type: json
+  content: |-
+    {
+      "sender_id": "{{sender_id}}",
+      "artifact_id": "{{artifact_id}}",
+      "ttl_seconds": 600
+    }
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Grant issuance returns HTTP 201', function () {
+        pm.response.to.have.status(201);
+      });
+      const responseBody = pm.response.json();
+      if (responseBody.grant_id) pm.environment.set('grant_id', responseBody.grant_id);
+      if (responseBody.download_token) pm.environment.set('download_grant', responseBody.download_token);
+    language: text/javascript
+order: 1000

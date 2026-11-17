@@ -665,7 +665,19 @@ O ambiente do Postman guarda o valor do Header Auth como variável secreta; ele 
 - Resultado observado: emissão HTTP 201 com token de 64 caracteres; download válido alcançou `Respond PDF Binary` com PDF de 13511 bytes; revogação retornou HTTP 200; download revogado retornou HTTP 403 sem executar `Load PDF Artifact`.
 - Os headers `X-Download-Token` e `X-Download-Grant` foram incluídos nos payloads manuais do MCP, mas esse modo não aplica a validação de entrada do Header Auth.
 - A tentativa HTTP da Test URL continuou retornando 404 porque os workflows não estavam em modo de escuta.
-- O Postman CLI não está instalado e o runner `runCollection` não está exposto no toolset MCP atual; a execução da collection permanece pendente até um listener de Test URL ser iniciado no n8n.
+- O Postman CLI está instalado na versão `1.90.0` e a autenticação local foi confirmada com `postman whoami`. O runner cloud tentou carregar a collection/ambiente, mas recebeu `AggregateError`; a execução foi então feita com exports locais temporários (não versionados).
+- Resultado do runner local: 1 iteração, 5 requests enviados, 7 asserções executadas e 7 falhas. Todas as respostas foram HTTP 404 com a mensagem do n8n de que o webhook não está registrado, pois os workflows permanecem inativos e nenhum listener de Test URL estava aberto.
+- Conclusão: é possível executar os testes da API pelo Postman CLI; para obter aprovação do contrato HTTP, ainda é necessário abrir o listener de cada workflow no editor do n8n. Nenhum workflow foi publicado ou ativado nesta etapa.
+
+### Teste autônomo após publicação — 2026-11-17
+
+- Os workflows `pdf-grant`, `pdf-download` e `pdf-revoke-grant` foram encontrados publicados e respondendo nas URLs de produção (`/webhook/...`).
+- O Postman CLI executou a collection local v3 em `postman/collections/curriculo/` com o ambiente `postman/environments/curriculo-local.environment.yaml` e o Header Auth recebido somente por `--env-var`.
+- Resultado: 1 iteração, 5 requests, 7 asserções, 0 falhas, exit code 0.
+- Contratos conferidos: emissão HTTP 201; download autorizado HTTP 200 com MIME `application/pdf`; revogação HTTP 200; download revogado e download sem concessão HTTP 403.
+- A autenticação também foi exercitada isoladamente com token inválido: o n8n respondeu HTTP 403 (`Authorization data is wrong!`) e a asserção de rejeição passou. O CLI reportou exit code 1 porque o modo unitário trata respostas 4xx como erro de transporte, mesmo com a asserção aprovada.
+- A collection remota `curriculo` também foi atualizada pelo MCP para usar `/webhook/`, mantendo a mesma sequência e as mesmas asserções.
+- A collection, o ambiente sanitizado e as instruções do Postman init agora estão organizados em `postman/`; relatórios de execução permanecem em `tmp/`, ignorados pelo Git.
 
 ### Export oficial
 

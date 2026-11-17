@@ -1,0 +1,32 @@
+$kind: http-request
+id: 73dd0501-ebfb-8147-3460-18ce61a46aee
+description: Confirma que uma concessão revogada não pode mais baixar o PDF.
+url: "{{n8n_base_url}}/webhook/curriculo-pdf-dev"
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+    description: Formato do corpo.
+  - key: X-Download-Token
+    value: "{{download_auth_token}}"
+    description: Header Auth local.
+  - key: X-Download-Grant
+    value: "{{download_grant}}"
+    description: Concessão já revogada.
+body:
+  type: json
+  content: |-
+    {
+      "sender_id": "{{sender_id}}",
+      "artifact_id": "{{artifact_id}}"
+    }
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Revoked grant returns HTTP 403', function () {
+        pm.response.to.have.status(403);
+      });
+    language: text/javascript
+order: 4000

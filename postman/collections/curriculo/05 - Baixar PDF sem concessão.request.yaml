@@ -1,0 +1,29 @@
+$kind: http-request
+id: e03783f4-9596-81fd-e9cb-3b2917cec012
+description: Confirma que o endpoint rejeita um download sem X-Download-Grant.
+url: "{{n8n_base_url}}/webhook/curriculo-pdf-dev"
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+    description: Formato do corpo.
+  - key: X-Download-Token
+    value: "{{download_auth_token}}"
+    description: Header Auth local.
+body:
+  type: json
+  content: |-
+    {
+      "sender_id": "{{sender_id}}",
+      "artifact_id": "{{artifact_id}}"
+    }
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Missing grant returns HTTP 403', function () {
+        pm.response.to.have.status(403);
+      });
+    language: text/javascript
+order: 5000

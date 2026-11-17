@@ -46,3 +46,7 @@ Use assuntos de commit curtos, imperativos e em inglês, opcionalmente com prefi
 ## Segurança e configuração
 
 O arquivo Compose contém atualmente credenciais de banco exclusivas para desenvolvimento. Nunca faça commit de segredos de produção. Prefira variáveis de ambiente e um arquivo `.env` ignorado pelo Git para configurações implantáveis. Exponha serviços externamente somente quando necessário.
+
+<API_TASKS>
+Before responding to any non-trivial API engineering task — designing, implementing, mocking, testing, monitoring, documenting, or deploying an API or Postman Flow — read `postman/skills/api-engineer/SKILL.md` and follow it. It is the default entry point for API work in this repository. Pure questions and trivial one-line edits do not need it.
+</API_TASKS>

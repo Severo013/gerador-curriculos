@@ -1,0 +1,32 @@
+name: curriculo-local
+values:
+  - key: n8n_base_url
+    value: 'http://localhost:5678'
+    enabled: true
+    type: default
+    description: Base local do n8n.
+  - key: download_auth_token
+    value: ''
+    enabled: false
+    type: secret
+    description: Valor local do Header Auth X-Download-Token; preencher somente no ambiente local.
+  - key: sender_id
+    value: review-values-20261117b
+    enabled: true
+    type: default
+    description: Remetente fictício usado nos testes locais.
+  - key: artifact_id
+    value: review-values-20261117b-persist-db-4-renata-revisao.pdf
+    enabled: true
+    type: default
+    description: Artefato fictício persistido no PostgreSQL local.
+  - key: grant_id
+    value: ''
+    enabled: true
+    type: default
+    description: Preenchido pelo teste da emissão.
+  - key: download_grant
+    value: ''
+    enabled: false
+    type: secret
+    description: Preenchido pelo teste da emissão; não versionar.

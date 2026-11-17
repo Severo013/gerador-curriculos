@@ -1,0 +1,35 @@
+$kind: http-request
+id: d7611047-a2a7-8e1b-6f45-915f604e66cb
+description: Baixa o PDF usando uma concessão emitida pelo request anterior.
+url: "{{n8n_base_url}}/webhook/curriculo-pdf-dev"
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+    description: Formato do corpo.
+  - key: X-Download-Token
+    value: "{{download_auth_token}}"
+    description: Header Auth local.
+  - key: X-Download-Grant
+    value: "{{download_grant}}"
+    description: Concessão emitida pelo request 01.
+body:
+  type: json
+  content: |-
+    {
+      "sender_id": "{{sender_id}}",
+      "artifact_id": "{{artifact_id}}"
+    }
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Valid grant returns HTTP 200', function () {
+        pm.response.to.have.status(200);
+      });
+      pm.test('Response is a PDF', function () {
+        pm.expect(pm.response.headers.get('Content-Type')).to.include('application/pdf');
+      });
+    language: text/javascript
+order: 2000

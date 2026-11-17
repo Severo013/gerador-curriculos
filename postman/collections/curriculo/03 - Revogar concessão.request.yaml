@@ -1,0 +1,35 @@
+$kind: http-request
+id: 64c5246d-7615-4b8f-a349-8f9d8ba57df4
+description: Revoga a concessão corrente usando grant_id, sender_id e o token.
+url: "{{n8n_base_url}}/webhook/curriculo-revoke-grant-dev"
+method: POST
+headers:
+  - key: Content-Type
+    value: application/json
+    description: Formato do corpo.
+  - key: X-Download-Token
+    value: "{{download_auth_token}}"
+    description: Header Auth local.
+  - key: X-Download-Grant
+    value: "{{download_grant}}"
+    description: Concessão a revogar.
+body:
+  type: json
+  content: |-
+    {
+      "sender_id": "{{sender_id}}",
+      "grant_id": "{{grant_id}}"
+    }
+auth:
+  type: noauth
+scripts:
+  - type: afterResponse
+    code: |-
+      pm.test('Grant revocation returns HTTP 200', function () {
+        pm.response.to.have.status(200);
+      });
+      pm.test('Grant is marked as revoked', function () {
+        pm.expect(pm.response.json().grant_revoked).to.eql(true);
+      });
+    language: text/javascript
+order: 3000

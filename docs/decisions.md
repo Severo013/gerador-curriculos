@@ -173,4 +173,14 @@ Este arquivo registra decisões que outra sessão precisa conhecer para retomar 
 - A execução manual pelo MCP do n8n confirmou novamente o contrato funcional: emissão 201, download válido 200, revogação 200 e download revogado 403.
 - A validação de Header Auth não foi considerada aprovada por esses ensaios, porque o modo manual do n8n ignora a barreira de entrada do webhook.
 - A Test URL respondeu 404 enquanto nenhum workflow estava escutando; isso não foi interpretado como falha do contrato.
-- O runner `runCollection` não está disponível como ferramenta chamável nesta conexão Postman e o CLI local não está instalado. Não será criado monitor remoto, pois as URLs apontam para localhost.
+- O runner `runCollection` não está disponível como ferramenta chamável nesta conexão Postman. O Postman CLI foi instalado depois (`1.90.0`) e autenticou com a conta do workspace, mas as operações cloud para carregar collection/environment retornaram `AggregateError`; por isso a execução reproduzível foi feita a partir de exports locais temporários.
+- A execução local da collection comprovou o runner e as asserções: 5 requests foram enviados, 7 testes falharam porque os endpoints Test URL responderam 404 (`webhook ... is not registered`). Isso confirma a limitação operacional atual (workflows inativos/sem listener), não uma falha do runner.
+
+## 2026-11-17 — Teste autônomo dos workflows publicados
+
+- O `postman init` instalou as instruções em `postman/skills/` e criou os metadados em `.postman/`. O workspace local foi vinculado ao workspace Postman da equipe.
+- A collection local v3 foi materializada em `postman/collections/curriculo/`; o ambiente versionado contém apenas valores não sensíveis e placeholders para os segredos.
+- Como os workflows foram publicados, as cinco requests passaram de `/webhook-test/` para `/webhook/`. A collection remota `curriculo` foi alinhada pelo MCP do Postman, sem alterar scripts, credenciais ou variáveis.
+- O Postman CLI executou a collection publicada com dados fictícios: 5 requests, 7 asserções, exit code 0. Foram observados 201 (emissão), 200 com `application/pdf` (download válido), 200 (revogação) e 403 (download revogado e sem concessão).
+- O Header Auth foi fornecido apenas por override de execução; nenhum valor secreto foi gravado nos arquivos locais ou no repositório.
+- Um ensaio isolado com token inválido retornou HTTP 403 e passou a asserção explícita de rejeição. O comando unitário do CLI encerra com código 1 para respostas 4xx esperadas; esse código não representa falha da asserção nesse caso.
