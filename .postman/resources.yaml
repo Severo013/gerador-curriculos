@@ -1,2 +1,7 @@
 workspace:
   id: a3d9b3f5-92c1-4baf-856d-aed90d8ee3e9
+dependencies:
+  mocks:
+    becdb0f7-a6fb-4c2c-91b1-bf76b54b1a84:
+      name: OpenAI API
+      path: ../postman/.dependencies/mocks/OpenAI API

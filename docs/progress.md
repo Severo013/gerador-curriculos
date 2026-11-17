@@ -773,3 +773,40 @@ Definir o contrato do primeiro canal real e implementar somente após aprovaçã
 - O workflow esta inativo por padrao. Antes de ativar, e necessario configurar HTTPS, a URL publica base do n8n e uma credencial Basic Auth exclusiva para os testadores.
 - O fluxo nao possui nodes de WhatsApp, e-mail, Telegram ou qualquer outro envio externo.
 - A validacao completa depende da instancia n8n em execucao e da credencial manual; o JSON foi validado estruturalmente localmente.
+
+## Redação pela OpenAI — implementada em rascunho em 2026-11-17
+
+### Alterações
+
+- `local-service` passou a solicitar redação pela Responses API somente depois da confirmação explícita dos dados.
+- Foram adicionados `Check AI Generation`, `Prepare OpenAI Request`, `Generate Resume with OpenAI` e `Finalize OpenAI Response`.
+- O contrato usa Structured Outputs estrito para `objective_text` e atividades vinculadas aos IDs de experiência da revisão atual.
+- Nome e contato permanecem locais; o request contém somente dados profissionais sanitizados e usa `store: false` e nenhum tool.
+- Falhas preservam a sessão em `ready_for_drafting`, registram apenas a categoria operacional em `generation_attempt` e pedem uma nova tentativa.
+- O grafo foi organizado em cinco grupos funcionais. Três nodes de roteamento permanecem no nível superior porque participam de ramificações com múltiplas saídas.
+
+### Testes com dados fictícios
+
+| Execução | Cenário | Resultado |
+|---|---|---|
+| `333` | Structured Output válido pelo mock OpenAI | `draft_ready`; prévia vinculada à revisão e montagem local dos dados pessoais. |
+| `338` | Recusa do modelo | `ready_for_drafting`; categoria `refusal`; nenhuma prévia persistida. |
+| `342` | Resposta incompleta por limite de saída | `ready_for_drafting`; categoria `incomplete`; nenhuma prévia persistida. |
+| `343` | HTTP 429 | `ready_for_drafting`; categoria `rate_limit`; dados confirmados preservados. |
+| `344` | HTTP 503 | `ready_for_drafting`; categoria `provider_unavailable`; dados confirmados preservados. |
+| `345` | Timeout de 30 segundos | `ready_for_drafting`; categoria `api_error`; dados confirmados preservados. |
+| `349`–`351` | Geração, aprovação e PDF | Sucesso até `delivery_status=ready`, Gotenberg e PostgreSQL locais, entrega `dry_run` e nenhum envio externo. |
+
+O input observado na simulação não continha nome nem e-mail. A versão publicada do workflow não foi substituída. O smoke test na API real ainda depende da criação manual da credencial `Header Auth` da OpenAI no n8n; nenhuma chave foi gravada no repositório.
+
+- Versão final do rascunho: `26d4b8ac-58af-4c2b-a2b6-a25223a096b4`.
+- Regressão dos endpoints publicados pelo Postman CLI: 5 requests, 7 asserções, 0 falhas e exit code 0.
+- `docker compose config`, lint da collection e lint do environment concluíram sem erros.
+
+### Smoke test real — concluído
+
+- Execução `371` usou uma conversa fictícia já confirmada e a credencial `Header Auth account 2`.
+- A Responses API retornou HTTP 200, status `completed`, modelo `gpt-5.6-terra` e uma resposta estruturada válida.
+- O workflow terminou em `draft_ready`, com `generated_resume.method=openai_responses_v1` e `source_revision=0`.
+- O input enviado à OpenAI não continha o nome nem o e-mail da pessoa fictícia.
+- As tentativas anteriores `369` e `370` documentaram, respectivamente, a correção do prefixo `Bearer` e a substituição da chave inválida; nenhuma chave foi registrada no repositório.

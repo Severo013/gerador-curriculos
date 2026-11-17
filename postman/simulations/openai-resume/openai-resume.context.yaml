@@ -1,0 +1,23 @@
+purpose:
+  stands_in_for: OpenAI Responses API used by local-service to rewrite confirmed resume content.
+  unblocks: Deterministic success and failure testing without credentials or paid model calls.
+assumptions:
+  - id: responses-structured-output
+    status: supported
+    claim: A completed POST /v1/responses call can return strict JSON Schema output inside an output_text content item.
+    reason: The provider contract documents Structured Outputs, and the verified Postman mock implements the same response envelope.
+    verification: On 2026-11-17, the OpenAI API specification and Structured Outputs guide were inspected; a workflow simulation run is still pending.
+    source: https://developers.openai.com/api/docs/guides/structured-outputs; postman/.dependencies/mocks/OpenAI API/scenarios/default.js
+    updated_at: "2026-11-17"
+  - id: responses-failure-shapes
+    status: supported
+    claim: The caller must handle refusals, incomplete responses, HTTP errors and transport timeouts without accepting a resume preview.
+    reason: These outcomes are explicit in the provider contract and are modeled by the selected mock and simulation overrides.
+    verification: On 2026-11-17, the provider documentation and mock scenarios were inspected; end-to-end caller verification is still pending.
+    source: https://developers.openai.com/api/docs/guides/structured-outputs; postman/.dependencies/mocks/OpenAI API/config.yaml; openai-resume-*.sim.yaml
+    updated_at: "2026-11-17"
+fingerprints:
+  - id: initial-openai-integration
+    date: "2026-11-17"
+    commit: unavailable; repository ownership prevents Git inspection in the sandbox
+    cli: Postman CLI 1.90.0; working tree modified during implementation

@@ -1,0 +1,13 @@
+simulation: openai-resume-overloaded
+routing: path
+mocks:
+  - name: openai
+    routeKey: openai
+    origin:
+      - api.openai.com
+    path: postman/.dependencies/mocks/OpenAI API
+    scenarios:
+      - overrides:
+          conditions:
+            error:
+              status_code: 503

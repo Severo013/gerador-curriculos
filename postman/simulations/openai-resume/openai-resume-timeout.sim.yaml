@@ -1,0 +1,13 @@
+simulation: openai-resume-timeout
+routing: path
+mocks:
+  - name: openai
+    routeKey: openai
+    origin:
+      - api.openai.com
+    path: postman/.dependencies/mocks/OpenAI API
+    scenarios:
+      - overrides:
+          conditions:
+            latency:
+              delay_ms: 35000

@@ -1,0 +1,38 @@
+version: 1
+id: becdb0f7-a6fb-4c2c-91b1-bf76b54b1a84
+name: OpenAI API
+slug: openai-api
+protocol: http
+port: 4612
+origin:
+  - api.openai.com
+interceptRequests: true
+scenarios:
+  - name: default
+    path: ./scenarios/default.js
+    conditions: {}
+    default: true
+  - name: insufficient-quota
+    path: ./scenarios/insufficient-quota.js
+    conditions: {}
+    default: false
+  - name: overloaded
+    path: ./scenarios/overloaded.js
+    conditions: {}
+    default: false
+  - name: rate-limited
+    path: ./scenarios/rate-limited.js
+    conditions: {}
+    default: false
+  - name: refusals
+    path: ./scenarios/refusals.js
+    conditions: {}
+    default: false
+  - name: server-error
+    path: ./scenarios/server-error.js
+    conditions: {}
+    default: false
+  - name: truncated
+    path: ./scenarios/truncated.js
+    conditions: {}
+    default: false

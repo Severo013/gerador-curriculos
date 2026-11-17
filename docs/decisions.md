@@ -219,3 +219,14 @@ Este arquivo registra decisões que outra sessão precisa conhecer para retomar 
 - O adaptador chama somente `POST /webhook/curriculo-dev` e devolve o campo `output` exigido pelo Chat Trigger.
 - Quando a resposta do servico contem `delivery_mode=dry_run`, o adaptador deixa essa limitacao explicita ao testador e nao realiza envio externo.
 - A URL publica HTTPS, a URL base do n8n e a credencial Basic Auth continuam sendo configuracoes manuais da instancia.
+
+## 2026-11-17 — Redação do currículo pela OpenAI Responses API
+
+- O workflow `local-service` ganhou uma etapa limitada de redação entre a confirmação dos dados e a aprovação do rascunho. A versão publicada `47324424-0e4d-40be-aec9-76c08edd345e` foi preservada; a integração permanece somente no rascunho até o smoke test real.
+- O modelo padrão é `gpt-5.6-terra`. Modelo e base da API são lidos das variáveis do n8n `OPENAI_RESUME_MODEL` e `OPENAI_BASE_URL`, com valores padrão seguros no próprio workflow. A chave fica exclusivamente em uma credencial `Header Auth`.
+- A chamada usa `POST /v1/responses`, `store: false`, Structured Outputs estrito, modelo sem ferramentas e limite de saída. Nome e contato nunca são enviados; o input contém apenas objetivo, indicador de primeiro emprego, IDs internos e relatos profissionais sanitizados.
+- A OpenAI redige somente objetivo e atividades. Nome, contato, escolaridade, cursos e habilidades são montados localmente a partir da revisão confirmada.
+- Recusa, resposta incompleta, HTTP 429/5xx, timeout, JSON inválido ou divergência de IDs não produzem fallback determinístico. O rascunho parcial é descartado, os dados confirmados continuam salvos e a pessoa recebe a opção de tentar novamente.
+- Cada correção incrementa `revision`; a prévia registra `source_revision` e é invalidada quando os dados mudam. O PDF só usa uma prévia existente e aprovada.
+- A simulação da dependência OpenAI está versionada em `postman/simulations/openai-resume/` e cobre sucesso, rate limit, indisponibilidade e timeout. A dependência reutilizável fica declarada em `.postman/resources.yaml`.
+- O smoke test real foi aprovado na execução `371` com dados fictícios e credencial `Header Auth account 2`. A resposta HTTP 200 chegou ao estágio `draft_ready`; nome e e-mail permaneceram fora do input da OpenAI.

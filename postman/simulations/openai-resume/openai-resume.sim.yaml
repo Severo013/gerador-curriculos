@@ -1,0 +1,9 @@
+simulation: openai-resume
+routing: path
+context: openai-resume.context.yaml
+mocks:
+  - name: openai
+    routeKey: openai
+    origin:
+      - api.openai.com
+    path: postman/.dependencies/mocks/OpenAI API
