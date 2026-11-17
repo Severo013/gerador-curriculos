@@ -107,6 +107,70 @@ Este arquivo registra decisões que outra sessão precisa conhecer para retomar 
 - O contrato de laboratório é `POST /webhook/curriculo-pdf-dev` com `sender_id` e `artifact_id` no corpo JSON.
 - A consulta filtra pelos dois identificadores. Registro ausente ou pertencente a outro remetente produz 404, sem revelar se o artefato existe para outra sessão.
 - O ramo de sucesso usa `Respond to Webhook` com binário, `Content-Type` do registro e `Content-Disposition` de anexo; o ramo de erro responde JSON em português.
-- O endpoint permanece sem autenticação apenas porque está limitado ao laboratório local. Antes de expor a rede, é obrigatório adicionar token, URL assinada ou mecanismo equivalente.
+- Naquele momento o endpoint permanecia sem autenticação por estar limitado ao laboratório local. Antes de expor a rede, ficou decidido adicionar Header Auth, URL assinada ou mecanismo equivalente.
 - A versão testada foi `019cb06f-299a-41de-adcf-e64dbf353e48`; o espelho sanitizado fica em `workflows/pdf-download.json`. O MCP não oferece export oficial reimportável, então o download oficial deve ser feito pela interface do workflow `pdf-download` quando necessário.
 - Ao importar o espelho em outra instância, a única configuração manual do workflow é selecionar a credencial PostgreSQL no node `Load PDF Artifact`.
+
+## 2026-11-17 — Header Auth no endpoint de download
+
+- O webhook `PDF Download Webhook` passou a exigir `Header Auth` antes de aceitar o corpo do pedido.
+- A credencial deve ser criada manualmente na interface porque a instância não possui uma credencial `httpHeaderAuth` e o MCP disponível não cria credenciais desse tipo.
+- O nome recomendado do cabeçalho de laboratório é `X-Download-Token`. O valor é local, não deve entrar no export sanitizado e não deve ser publicado em documentação ou commit.
+- Execuções manuais pelo MCP não exercitam a autenticação HTTP; elas servem apenas para verificar que o grafo continua retornando o PDF e os erros depois da alteração.
+- A versão testada dessa alteração é `ae9e0da6-e51e-47eb-b2a5-321e8fd9dab8`. A validação efetiva do token deve ser feita pela Test URL após associar a credencial.
+
+## 2026-11-17 — Concessões temporárias de download
+
+- A emissão de acesso foi separada no workflow `pdf-grant`; o endpoint de recuperação ainda não foi alterado nesta etapa.
+- A tabela `download_grants` mantém o vínculo entre `sender_id`, `artifact_id`, hash do token e `expires_at`, além de reservar `revoked_at` e `used_at` para o ciclo de vida.
+- O token é gerado pelo PostgreSQL com `pgcrypto`, não pelo sandbox JavaScript do n8n. O primeiro ensaio com `crypto.randomUUID()` falhou e foi removido.
+- O token bruto só aparece na resposta 201 da emissão. O banco armazena apenas o hash SHA-256; pedidos 404 não geram token na saída.
+- O TTL aceito é limitado a 60–3600 segundos. Valores menores ou maiores são ajustados antes da persistência.
+- A concessão usa a mesma credencial Header Auth do laboratório e permanece em rascunho. Nenhuma publicação ou entrega externa ocorre nesta decisão.
+- A próxima alteração deve ser no workflow `pdf-download`: receber `X-Download-Grant`, comparar o hash com a concessão, exigir validade temporal e filtrar por remetente/artefato.
+
+## 2026-11-17 — Validação da concessão no download
+
+- O workflow `pdf-download` mantém o `Header Auth` do laboratório e adiciona o header `X-Download-Grant` como segunda barreira.
+- A consulta compara o hash SHA-256 do token com `download_grants` e exige simultaneamente `sender_id`, `artifact_id`, `revoked_at IS NULL` e `expires_at > now()`.
+- A concessão é reutilizável até expirar. Não há atualização de `used_at` nesta etapa para preservar reintentos seguros do download.
+- Falhas de concessão retornam 403 genérico antes de consultar o conteúdo do PDF; o endpoint não diferencia publicamente token ausente, inválido, expirado ou revogado.
+- A versão testada é `417f4a22-e394-4f79-a81e-4688c16c8972`; o export sanitizado está em `workflows/pdf-download.json`.
+- A próxima decisão será implementar revogação explícita e limpeza de concessões expiradas. O consumo único só será adotado se o canal real exigir esse comportamento.
+
+## 2026-11-17 — Revogação explícita de concessões
+
+- A revogação foi separada no workflow `pdf-revoke-grant`, sem misturar a operação administrativa com o download do PDF.
+- A solicitação exige `grant_id`, `sender_id` e o token no header `X-Download-Grant`; o SQL só atualiza a linha quando os três valores correspondem ao hash persistido.
+- Token incorreto, remetente divergente e concessão inexistente compartilham HTTP 404 para não confirmar a existência de uma concessão.
+- A operação usa `COALESCE(revoked_at, now())` e é idempotente: reintentos válidos não alteram o instante original da revogação.
+- O workflow continua inativo e não publicado. A credencial Header Auth e a credencial PostgreSQL são as mesmas já usadas nos workflows de concessão e download.
+- A versão testada é `caeb63b7-af6a-4325-83fd-69504618771f`; o espelho sanitizado está em `workflows/pdf-revoke-grant.json`.
+- A próxima etapa deve limpar concessões expiradas ou revogadas de forma agendada, mantendo a política de retenção explícita antes de remover dados.
+
+## 2026-11-17 — Limpeza agendada de concessões
+
+- A limpeza foi isolada no workflow `pdf-grant-cleanup`, separado dos endpoints de emissão, revogação e download.
+- O agendamento é diário e a retenção padrão é de sete dias após `expires_at` ou `revoked_at`.
+- A consulta retorna um resumo agregado mesmo sem linhas elegíveis, facilitando auditoria e monitoramento posterior.
+- Concessões válidas e revogações recentes não são removidas; o intervalo de retenção evita apagar registros imediatamente após o uso.
+- O workflow permanece inativo e não publicado. A única configuração manual é selecionar a credencial PostgreSQL já usada pelos demais workflows, caso o espelho seja importado em outra instância.
+- A execução de teste com retenção zero removeu seis concessões fictícias antigas do banco local; esse override não está no workflow nem no export.
+- A versão testada é `3466f49c-ef39-4ebd-985c-e9a1c38bda68`; o espelho sanitizado está em `workflows/pdf-grant-cleanup.json`.
+- Antes da ativação, os três endpoints devem ser conferidos pela Test URL com Header Auth e dados fictícios.
+
+## 2026-11-17 — Coleção Postman para os endpoints de concessão
+
+- A collection `curriculo` foi mantida no workspace `Gabriel Severo's Workspace` e recebeu requests para emissão, download válido, revogação, download revogado e download sem concessão.
+- O ambiente `curriculo-local` usa variáveis para base URL, remetente, artefato, `grant_id` e token de concessão; o valor do Header Auth fica em variável secreta do Postman.
+- O request de emissão atualiza automaticamente `grant_id` e `download_grant` no ambiente para encadear os requests seguintes.
+- Não foi gravado segredo no repositório. A collection usa `{{download_auth_token}}` no header `X-Download-Token`.
+- A tentativa HTTP pela Test URL retornou 404 porque os workflows permanecem inativos e nenhum listener de teste estava aberto. O teste completo exige iniciar o listener no editor do n8n para cada webhook.
+- A conexão MCP do Postman disponibilizada nesta sessão permite gerenciar collections, mas não expõe o runner `runCollection`; a execução final deverá ser feita pelo runner/interface do Postman enquanto o listener estiver ativo.
+
+## 2026-11-17 — Nova tentativa dos testes de contrato
+
+- A execução manual pelo MCP do n8n confirmou novamente o contrato funcional: emissão 201, download válido 200, revogação 200 e download revogado 403.
+- A validação de Header Auth não foi considerada aprovada por esses ensaios, porque o modo manual do n8n ignora a barreira de entrada do webhook.
+- A Test URL respondeu 404 enquanto nenhum workflow estava escutando; isso não foi interpretado como falha do contrato.
+- O runner `runCollection` não está disponível como ferramenta chamável nesta conexão Postman e o CLI local não está instalado. Não será criado monitor remoto, pois as URLs apontam para localhost.

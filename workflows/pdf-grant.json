@@ -1,0 +1,217 @@
+{
+  "name": "pdf-grant",
+  "nodes": [
+    {
+      "id": "28a3523e-5ee1-46ca-bf99-cb98d81783c0",
+      "name": "PDF Grant Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        96
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "curriculo-grant-dev",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "be15c3fb-8d8b-4fb0-a3ec-3ea5fc08a031",
+      "name": "Prepare Grant Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const body = $json.body ?? $json;\nconst senderId = String(body.sender_id ?? '').trim();\nconst artifactId = String(body.artifact_id ?? '').trim();\nconst requestedTtl = Number(body.ttl_seconds ?? 900);\nconst ttlSeconds = Number.isFinite(requestedTtl)\n  ? Math.min(Math.max(Math.trunc(requestedTtl), 60), 3600)\n  : 900;\n\nif (!senderId || !artifactId) {\n  return {\n    json: {\n      request_valid: false,\n      status_code: 400,\n      reply: 'Informe sender_id e artifact_id para criar o token temporário.',\n    },\n  };\n}\n\nreturn {\n  json: {\n    request_valid: true,\n    sender_id: senderId,\n    artifact_id: artifactId,\n    ttl_seconds: ttlSeconds,\n  },\n};"
+      }
+    },
+    {
+      "id": "111ec691-bbef-4a67-ab03-03d8c1c00fae",
+      "name": "Check Grant Input",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        448,
+        96
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.request_valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "1a7fcaeb-6dfe-433a-8693-ab05e71ea59a",
+      "name": "Persist Download Grant",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE EXTENSION IF NOT EXISTS pgcrypto;\n\nCREATE TABLE IF NOT EXISTS download_grants (\n  grant_id text PRIMARY KEY,\n  sender_id text NOT NULL,\n  artifact_id text NOT NULL REFERENCES resume_artifacts (artifact_id) ON DELETE CASCADE,\n  token_hash bytea NOT NULL UNIQUE,\n  expires_at timestamptz NOT NULL,\n  revoked_at timestamptz,\n  used_at timestamptz,\n  created_at timestamptz NOT NULL DEFAULT now()\n);\n\nCREATE INDEX IF NOT EXISTS download_grants_lookup_idx\n  ON download_grants (sender_id, artifact_id, expires_at);\n\nWITH request AS (\n  SELECT\n    $1::text AS sender_id,\n    $2::text AS artifact_id,\n    $3::integer AS ttl_seconds\n),\ncandidate AS (\n  SELECT\n    request.sender_id,\n    request.artifact_id,\n    request.ttl_seconds,\n    'grant-' || gen_random_uuid()::text AS grant_id,\n    encode(gen_random_bytes(32), 'hex') AS raw_token,\n    now() + make_interval(secs => request.ttl_seconds) AS requested_expires_at\n  FROM request\n  WHERE EXISTS (\n    SELECT 1\n    FROM resume_artifacts\n    WHERE artifact_id = request.artifact_id\n      AND sender_id = request.sender_id\n  )\n),\ninserted AS (\n  INSERT INTO download_grants (\n    grant_id,\n    sender_id,\n    artifact_id,\n    token_hash,\n    expires_at\n  )\n  SELECT\n    candidate.grant_id,\n    candidate.sender_id,\n    candidate.artifact_id,\n    digest(candidate.raw_token, 'sha256'),\n    candidate.requested_expires_at\n  FROM candidate\n  ON CONFLICT DO NOTHING\n  RETURNING grant_id, sender_id, artifact_id, expires_at\n)\nSELECT\n  request.sender_id,\n  request.artifact_id,\n  candidate.grant_id AS requested_grant_id,\n  CASE WHEN inserted.grant_id IS NOT NULL THEN candidate.raw_token END AS raw_token,\n  request.ttl_seconds,\n  candidate.requested_expires_at,\n  inserted.grant_id AS persisted_grant_id,\n  inserted.expires_at AS persisted_expires_at,\n  (inserted.grant_id IS NOT NULL) AS grant_created\nFROM request\nLEFT JOIN candidate ON TRUE\nLEFT JOIN inserted ON TRUE;",
+        "options": {
+          "queryReplacement": "={{ [$json.sender_id, $json.artifact_id, $json.ttl_seconds] }}"
+        }
+      }
+    },
+    {
+      "id": "eb27c7e5-287b-4356-8752-3bac1ef71bf1",
+      "name": "Format Grant Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $input.item.json;\n\nif (!input.grant_created) {\n  return {\n    json: {\n      status_code: 404,\n      grant_created: false,\n      sender_id: input.sender_id,\n      artifact_id: input.artifact_id,\n      reply: 'PDF não encontrado para este remetente.',\n    },\n  };\n}\n\nreturn {\n  json: {\n    status_code: 201,\n    grant_created: true,\n    grant_id: input.persisted_grant_id,\n    sender_id: input.sender_id,\n    artifact_id: input.artifact_id,\n    download_header: 'X-Download-Grant',\n    download_token: input.raw_token,\n    expires_at: input.persisted_expires_at,\n    reply: 'Token temporário criado para este PDF.',\n  },\n};"
+      }
+    },
+    {
+      "id": "ba7c7785-359c-4ffa-81c8-c5ae16515fa7",
+      "name": "Respond Grant JSON",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1120,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": "={{ $json.status_code }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "924f465a-b365-4937-a5af-538e2d95de39",
+      "name": "Respond Grant Input Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        672,
+        192
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 400,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "PDF Grant Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prepare Grant Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Grant Request": {
+      "main": [
+        [
+          {
+            "node": "Check Grant Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Grant Input": {
+      "main": [
+        [
+          {
+            "node": "Persist Download Grant",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Grant Input Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist Download Grant": {
+      "main": [
+        [
+          {
+            "node": "Format Grant Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Grant Response": {
+      "main": [
+        [
+          {
+            "node": "Respond Grant JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  }
+}
+

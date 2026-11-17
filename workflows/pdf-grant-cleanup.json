@@ -1,0 +1,96 @@
+{
+  "name": "pdf-grant-cleanup",
+  "nodes": [
+    {
+      "id": "82846549-9adb-4c4b-9184-984341026d87",
+      "name": "Daily Grant Cleanup Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "2ed8796d-4db9-46fa-938f-940d6050dc0f",
+      "name": "Prepare Cleanup Parameters",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        128
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const retentionDays = 7;\n\nreturn {\n  json: {\n    retention_days: retentionDays,\n    retention_policy: 'Remove grants expired or revoked for more than seven days.',\n  },\n};"
+      }
+    },
+    {
+      "id": "7b0f601c-f61b-4bcf-b149-b1ab1238cd0f",
+      "name": "Delete Old Grants",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        496,
+        128
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH deleted AS (\n  DELETE FROM download_grants\n  WHERE expires_at < now() - make_interval(days => $1::integer)\n     OR revoked_at < now() - make_interval(days => $1::integer)\n  RETURNING grant_id\n)\nSELECT\n  count(*)::integer AS deleted_count,\n  $1::integer AS retention_days,\n  now() AS cleaned_at\nFROM deleted;",
+        "options": {
+          "queryReplacement": "={{ [$json.retention_days] }}"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Grant Cleanup Schedule": {
+      "main": [
+        [
+          {
+            "node": "Prepare Cleanup Parameters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Cleanup Parameters": {
+      "main": [
+        [
+          {
+            "node": "Delete Old Grants",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [
+    {
+      "id": "cfda705d-c4a8-40b9-bea7-f190ea36d437",
+      "name": "Cleanup Execution",
+      "nodeNames": [
+        "Prepare Cleanup Parameters",
+        "Delete Old Grants"
+      ],
+      "description": "Remove concessões expiradas ou revogadas após a janela de retenção."
+    }
+  ],
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  }
+}

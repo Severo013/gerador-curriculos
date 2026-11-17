@@ -2,6 +2,13 @@
   "name": "pdf-download",
   "nodes": [
     {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "curriculo-pdf-dev",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
       "id": "49f8055a-27a0-424f-92c7-a3a62c19883a",
       "name": "PDF Download Webhook",
       "type": "n8n-nodes-base.webhook",
@@ -9,61 +16,47 @@
       "position": [
         0,
         96
-      ],
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "curriculo-pdf-dev",
-        "authentication": "none",
-        "responseMode": "responseNode"
-      }
+      ]
     },
     {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH artifact AS (\n  SELECT\n    artifact_id,\n    file_name,\n    mime_type,\n    encode(content_bytes, 'base64') AS content_base64,\n    octet_length(content_bytes) AS size_bytes\n  FROM resume_artifacts\n  WHERE artifact_id = $1\n    AND sender_id = $2\n)\nSELECT\n  $1::text AS requested_artifact_id,\n  $2::text AS sender_id,\n  artifact.artifact_id,\n  artifact.file_name,\n  artifact.mime_type,\n  artifact.content_base64,\n  artifact.size_bytes\nFROM (SELECT 1) AS request\nLEFT JOIN artifact ON TRUE;",
+        "options": {
+          "queryReplacement": "={{ [$json.pdf_artifact_id, $json.sender_id] }}"
+        }
+      },
       "id": "b0ff843c-8304-482c-80ae-c694bb0436bb",
       "name": "Load PDF Artifact",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.8,
       "position": [
-        224,
-        96
-      ],
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "WITH artifact AS (\n  SELECT\n    artifact_id,\n    file_name,\n    mime_type,\n    encode(content_bytes, 'base64') AS content_base64,\n    octet_length(content_bytes) AS size_bytes\n  FROM resume_artifacts\n  WHERE artifact_id = $1\n    AND sender_id = $2\n)\nSELECT\n  $1::text AS requested_artifact_id,\n  $2::text AS sender_id,\n  artifact.artifact_id,\n  artifact.file_name,\n  artifact.mime_type,\n  artifact.content_base64,\n  artifact.size_bytes\nFROM (SELECT 1) AS request\nLEFT JOIN artifact ON TRUE;",
-        "options": {
-          "queryReplacement": "={{ [$json.body.artifact_id ?? $json.artifact_id, $json.body.sender_id ?? $json.sender_id] }}"
-        }
-      }
+        896,
+        0
+      ]
     },
     {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const input = $input.item.json;\nconst artifactId = input.artifact_id ?? input.requested_artifact_id;\n\nif (!input.artifact_id || !input.content_base64) {\n  return {\n    json: {\n      sender_id: input.sender_id,\n      pdf_artifact_id: artifactId,\n      pdf_found: false,\n      status_code: 404,\n      reply: 'PDF não encontrado para este remetente.',\n    },\n  };\n}\n\nconst fileName = String(input.file_name || 'curriculo.pdf').replace(/[\\r\\n\"]/g, '_');\nconst fileExtension = fileName.split('.').pop() || 'pdf';\nconst sizeBytes = Number(input.size_bytes ?? 0);\n\nreturn {\n  json: {\n    sender_id: input.sender_id,\n    pdf_artifact_id: input.artifact_id,\n    pdf_filename: fileName,\n    pdf_mime_type: input.mime_type || 'application/pdf',\n    pdf_size_bytes: Number.isFinite(sizeBytes) ? sizeBytes : null,\n    pdf_found: true,\n    status_code: 200,\n    reply: 'PDF recuperado do armazenamento local.',\n  },\n  binary: {\n    data: {\n      data: input.content_base64,\n      mimeType: input.mime_type || 'application/pdf',\n      fileName,\n      fileExtension,\n      fileSize: Number.isFinite(sizeBytes) ? String(sizeBytes) : undefined,\n    },\n  },\n};"
+      },
       "id": "43563aab-a57e-4644-8b27-7b210e663cc6",
       "name": "Prepare Download Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        448,
-        96
-      ],
-      "parameters": {
-        "mode": "runOnceForEachItem",
-        "language": "javaScript",
-        "jsCode": "const input = $input.item.json;\nconst artifactId = input.artifact_id ?? input.requested_artifact_id;\n\nif (!input.artifact_id || !input.content_base64) {\n  return {\n    json: {\n      sender_id: input.sender_id,\n      pdf_artifact_id: artifactId,\n      pdf_found: false,\n      status_code: 404,\n      reply: 'PDF não encontrado para este remetente.',\n    },\n  };\n}\n\nconst fileName = String(input.file_name || 'curriculo.pdf').replace(/[\\r\\n\"]/g, '_');\nconst fileExtension = fileName.split('.').pop() || 'pdf';\nconst sizeBytes = Number(input.size_bytes ?? 0);\n\nreturn {\n  json: {\n    sender_id: input.sender_id,\n    pdf_artifact_id: input.artifact_id,\n    pdf_filename: fileName,\n    pdf_mime_type: input.mime_type || 'application/pdf',\n    pdf_size_bytes: Number.isFinite(sizeBytes) ? sizeBytes : null,\n    pdf_found: true,\n    status_code: 200,\n    reply: 'PDF recuperado do armazenamento local.',\n  },\n  binary: {\n    data: {\n      data: input.content_base64,\n      mimeType: input.mime_type || 'application/pdf',\n      fileName,\n      fileExtension,\n      fileSize: Number.isFinite(sizeBytes) ? String(sizeBytes) : undefined,\n    },\n  },\n};"
-      }
+        1120,
+        0
+      ]
     },
     {
-      "id": "62d7316d-4151-4c66-8b31-3d6eb72b9a41",
-      "name": "Check Artifact Found",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.4,
-      "position": [
-        672,
-        96
-      ],
       "parameters": {
         "conditions": {
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "strict"
+            "typeValidation": "strict",
+            "version": 1
           },
           "conditions": [
             {
@@ -76,22 +69,22 @@
             }
           ],
           "combinator": "and"
-        }
-      }
+        },
+        "options": {}
+      },
+      "id": "62d7316d-4151-4c66-8b31-3d6eb72b9a41",
+      "name": "Check Artifact Found",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        1344,
+        0
+      ]
     },
     {
-      "id": "a96945d6-d8c2-47d8-9b42-8f5305967013",
-      "name": "Respond PDF Binary",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.5,
-      "position": [
-        896,
-        0
-      ],
       "parameters": {
         "respondWith": "binary",
         "responseDataSource": "set",
-        "inputFieldName": "data",
         "options": {
           "responseCode": 200,
           "responseHeaders": {
@@ -107,17 +100,17 @@
             ]
           }
         }
-      }
-    },
-    {
-      "id": "899136b7-87ed-4f90-b818-3fd2c63b1bc2",
-      "name": "Respond Download Error",
+      },
+      "id": "a96945d6-d8c2-47d8-9b42-8f5305967013",
+      "name": "Respond PDF Binary",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        896,
-        192
-      ],
+        1568,
+        0
+      ]
+    },
+    {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ $json }}",
@@ -132,21 +125,120 @@
             ]
           }
         }
+      },
+      "id": "899136b7-87ed-4f90-b818-3fd2c63b1bc2",
+      "name": "Respond Download Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1568,
+        96
+      ]
+    },
+    {
+      "id": "d1f7a8c4-1f95-4c21-9e0e-1a32a4a81b17",
+      "name": "Normalize Download Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const body = $json.body ?? {};\nconst headers = $json.headers ?? {};\nconst grantToken = String(\n  headers['x-download-grant'] ??\n  headers['X-Download-Grant'] ??\n  ''\n).trim();\n\nreturn {\n  json: {\n    sender_id: String(body.sender_id ?? '').trim(),\n    pdf_artifact_id: String(body.artifact_id ?? '').trim(),\n    grant_token_present: grantToken.length > 0,\n    grant_token: grantToken,\n  },\n};"
+      }
+    },
+    {
+      "id": "4b7d6b7d-cd7a-4b6e-84b9-5a4ac4d8f5a4",
+      "name": "Validate Download Grant",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        448,
+        96
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH request AS (\n  SELECT\n    $1::text AS sender_id,\n    $2::text AS artifact_id,\n    length($3::text) > 0 AS grant_token_present\n),\ngrant_match AS (\n  SELECT\n    grant_id,\n    expires_at,\n    revoked_at\n  FROM download_grants\n  WHERE sender_id = $1\n    AND artifact_id = $2\n    AND token_hash = digest(\n      COALESCE(NULLIF($3::text, ''), 'missing-grant-token'),\n      'sha256'\n    )\n)\nSELECT\n  request.sender_id,\n  request.artifact_id AS pdf_artifact_id,\n  request.grant_token_present,\n  grant_match.grant_id,\n  grant_match.expires_at,\n  grant_match.revoked_at,\n  CASE\n    WHEN NOT request.grant_token_present THEN 'missing'\n    WHEN grant_match.grant_id IS NULL THEN 'invalid'\n    WHEN grant_match.revoked_at IS NOT NULL THEN 'revoked'\n    WHEN grant_match.expires_at <= now() THEN 'expired'\n    ELSE 'valid'\n  END AS grant_status,\n  (\n    grant_match.grant_id IS NOT NULL\n    AND grant_match.revoked_at IS NULL\n    AND grant_match.expires_at > now()\n  ) AS grant_valid\nFROM request\nLEFT JOIN grant_match ON TRUE;",
+        "options": {
+          "queryReplacement": "={{ [$json.sender_id, $json.pdf_artifact_id, $json.grant_token] }}"
+        }
+      }
+    },
+    {
+      "id": "f4f6af42-dad1-4dc7-bd9b-40c4a8454f8d",
+      "name": "Check Grant Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        672,
+        96
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.grant_valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "7e595b91-2a0a-4c34-9d14-0bf6ac2619c1",
+      "name": "Prepare Grant Rejection",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $input.item.json;\n\nreturn {\n  json: {\n    status_code: 403,\n    grant_valid: false,\n    sender_id: input.sender_id,\n    pdf_artifact_id: input.pdf_artifact_id,\n    reply: 'Token de download ausente, inválido, expirado ou revogado.',\n  },\n};"
+      }
+    },
+    {
+      "id": "2b5a2d8a-8f04-47b4-8c8d-8f5e6a5c3b90",
+      "name": "Respond Grant Rejected",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1120,
+        192
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 403,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              }
+            ]
+          }
+        }
       }
     }
   ],
   "connections": {
-    "PDF Download Webhook": {
-      "main": [
-        [
-          {
-            "node": "Load PDF Artifact",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Load PDF Artifact": {
       "main": [
         [
@@ -186,11 +278,104 @@
           }
         ]
       ]
+    },
+    "PDF Download Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Download Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Download Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Download Grant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Download Grant": {
+      "main": [
+        [
+          {
+            "node": "Check Grant Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Grant Valid": {
+      "main": [
+        [
+          {
+            "node": "Load PDF Artifact",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Grant Rejection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Grant Rejection": {
+      "main": [
+        [
+          {
+            "node": "Respond Grant Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
     "executionOrder": "v1",
     "availableInMCP": true
-  }
+  },
+  "nodeGroups": [
+    {
+      "id": "a3f2e9b4-6d08-4e08-b6a8-c1b4c0f4d5a2",
+      "name": "Grant Validation",
+      "nodeNames": [
+        "Normalize Download Request",
+        "Validate Download Grant",
+        "Check Grant Valid"
+      ],
+      "description": "Normaliza o pedido e valida a concessão temporária antes de ler o PDF."
+    },
+    {
+      "id": "bf6c1d20-0b1a-4d6e-89dd-0e8b5e03e4ad",
+      "name": "Artifact Retrieval",
+      "nodeNames": [
+        "Load PDF Artifact",
+        "Prepare Download Response",
+        "Check Artifact Found"
+      ],
+      "description": "Carrega o artefato autorizado e prepara a resposta binária do PDF."
+    },
+    {
+      "id": "c9f8f4b3-7a1d-4aa4-9fc3-1b6f6b9c2d50",
+      "name": "Grant Rejection",
+      "nodeNames": [
+        "Prepare Grant Rejection",
+        "Respond Grant Rejected"
+      ],
+      "description": "Responde de forma uniforme quando a concessão está ausente, inválida, expirada ou revogada."
+    }
+  ]
 }
 

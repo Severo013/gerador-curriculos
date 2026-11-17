@@ -1,0 +1,227 @@
+{
+  "name": "pdf-revoke-grant",
+  "nodes": [
+    {
+      "id": "5c01182f-042a-44e5-a9a5-cdd2d7a38b6e",
+      "name": "PDF Grant Revocation Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        96
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "curriculo-revoke-grant-dev",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "1866f566-d21a-4a80-8231-aa2858e584cf",
+      "name": "Normalize Revocation Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const body = $json.body ?? $json;\nconst headers = $json.headers ?? {};\nconst grantToken = String(headers['x-download-grant'] ?? headers['X-Download-Grant'] ?? '').trim();\nconst grantId = String(body.grant_id ?? '').trim();\nconst senderId = String(body.sender_id ?? '').trim();\nconst requestValid = Boolean(grantId && senderId && grantToken);\n\nif (!requestValid) {\n  return {\n    json: {\n      request_valid: false,\n      status_code: 400,\n      reply: 'Informe sender_id, grant_id e o header X-Download-Grant para revogar o token.',\n    },\n  };\n}\n\nreturn {\n  json: {\n    request_valid: true,\n    grant_id: grantId,\n    sender_id: senderId,\n    grant_token: grantToken,\n  },\n};"
+      }
+    },
+    {
+      "id": "c1994a1d-6462-41fa-ac62-703458193627",
+      "name": "Check Revocation Input",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        448,
+        96
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.request_valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "42ce9fae-f42c-4c28-9285-aa7e3fa942ef",
+      "name": "Revoke Download Grant",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        720,
+        128
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH request AS (\n  SELECT $1::text AS grant_id, $2::text AS sender_id, $3::text AS grant_token\n),\nupdated AS (\n  UPDATE download_grants\n  SET revoked_at = COALESCE(revoked_at, now())\n  WHERE grant_id = $1\n    AND sender_id = $2\n    AND token_hash = digest($3::text, 'sha256')\n  RETURNING grant_id, artifact_id, revoked_at\n)\nSELECT\n  request.grant_id,\n  request.sender_id,\n  updated.artifact_id,\n  updated.revoked_at,\n  (updated.grant_id IS NOT NULL) AS grant_revoked,\n  CASE WHEN updated.grant_id IS NOT NULL THEN 200 ELSE 404 END AS status_code\nFROM request\nLEFT JOIN updated ON TRUE;",
+        "options": {
+          "queryReplacement": "={{ [$json.grant_id, $json.sender_id, $json.grant_token] }}"
+        }
+      }
+    },
+    {
+      "id": "5d49bb63-3a82-47e1-be0f-f0faa9c1246e",
+      "name": "Format Revocation Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        944,
+        128
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $input.item.json;\n\nif (!input.grant_revoked) {\n  return {\n    json: {\n      status_code: 404,\n      grant_revoked: false,\n      grant_id: input.grant_id,\n      reply: 'Concessão não encontrada.',\n    },\n  };\n}\n\nreturn {\n  json: {\n    status_code: 200,\n    grant_revoked: true,\n    grant_id: input.grant_id,\n    sender_id: input.sender_id,\n    artifact_id: input.artifact_id,\n    revoked_at: input.revoked_at,\n    reply: 'Concessão revogada com sucesso.',\n  },\n};"
+      }
+    },
+    {
+      "id": "276c28b2-f6f6-4289-a8e0-f80f43031fa2",
+      "name": "Respond Revocation JSON",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": "={{ $json.status_code }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "b79dd2f2-33f8-4551-8a30-285f0b8cbbda",
+      "name": "Respond Revocation Input Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        832,
+        192
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 400,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "PDF Grant Revocation Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Revocation Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Revocation Request": {
+      "main": [
+        [
+          {
+            "node": "Check Revocation Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Revocation Input": {
+      "main": [
+        [
+          {
+            "node": "Revoke Download Grant",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Revocation Input Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Revoke Download Grant": {
+      "main": [
+        [
+          {
+            "node": "Format Revocation Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Revocation Response": {
+      "main": [
+        [
+          {
+            "node": "Respond Revocation JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodeGroups": [
+    {
+      "id": "2105df05-9f10-4c49-a898-9cf62a3108c6",
+      "name": "Revocation Persistence",
+      "nodeNames": [
+        "Revoke Download Grant",
+        "Format Revocation Response"
+      ],
+      "description": "Revoga a concessão no PostgreSQL e prepara a resposta do endpoint."
+    }
+  ],
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  }
+}
