@@ -230,3 +230,11 @@ Este arquivo registra decisões que outra sessão precisa conhecer para retomar 
 - Cada correção incrementa `revision`; a prévia registra `source_revision` e é invalidada quando os dados mudam. O PDF só usa uma prévia existente e aprovada.
 - A simulação da dependência OpenAI está versionada em `postman/simulations/openai-resume/` e cobre sucesso, rate limit, indisponibilidade e timeout. A dependência reutilizável fica declarada em `.postman/resources.yaml`.
 - O smoke test real foi aprovado na execução `371` com dados fictícios e credencial `Header Auth account 2`. A resposta HTTP 200 chegou ao estágio `draft_ready`; nome e e-mail permaneceram fora do input da OpenAI.
+
+## 2026-11-17 — Currículo PDF com layout do modelo
+
+- O PDF passou a ser montado por um renderer dedicado, `Build Styled Resume HTML`, entre a decisão de gerar o arquivo e o Gotenberg. O node de estado continua responsável apenas pela sessão e metadados.
+- O layout reproduz o modelo A4 de uma coluna: Arial/Liberation Sans, nome em caixa alta, margens amplas, títulos em teal `#125f6a`, regras de separação e listas com marcadores.
+- O renderer usa HTML semântico (`h1`, `h2`, `section`, `ul` e `li`), escapa dados dinâmicos e evita `pre`. Seções opcionais sem conteúdo são omitidas; para primeiro emprego, a experiência exibe uma indicação textual.
+- O contrato binário permaneceu `pdf_html_file` com `index.html`; não houve alteração de schema, migração, credencial ou publicação. A versão publicada `47324424-0e4d-40be-aec9-76c08edd345e` continua preservada.
+- A versão testada do rascunho é `f866e10f-9a60-4ec0-a162-ab12e3948014`; o espelho sanitizado está em `workflows/service.json`, sem credenciais, tokens, `pinData` ou `webhookId`.

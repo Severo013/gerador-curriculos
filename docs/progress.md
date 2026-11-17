@@ -810,3 +810,21 @@ O input observado na simulação não continha nome nem e-mail. A versão public
 - O workflow terminou em `draft_ready`, com `generated_resume.method=openai_responses_v1` e `source_revision=0`.
 - O input enviado à OpenAI não continha o nome nem o e-mail da pessoa fictícia.
 - As tentativas anteriores `369` e `370` documentaram, respectivamente, a correção do prefixo `Bearer` e a substituição da chave inválida; nenhuma chave foi registrada no repositório.
+
+## Layout do currículo PDF — implementado em 2026-11-17
+
+### Alterações
+
+- Criado o node `Build Styled Resume HTML` no rascunho do `local-service` e conectado ao Gotenberg.
+- O renderer transforma as seções aprovadas em HTML semântico com tipografia, margens, cabeçalhos, regras e marcadores inspirados no modelo fornecido.
+- Cursos e outras seções opcionais vazias são omitidos. O conteúdo é escapado antes de entrar no HTML e o nome do arquivo continua sendo derivado localmente.
+- O fluxo de persistência e entrega não mudou: o PDF continua sendo armazenado no PostgreSQL e preparado em `dry_run`, sem envio externo.
+
+### Validação
+
+| Execução | Cenário | Resultado |
+|---|---|---|
+| `375` | Primeira execução após separar o renderer | Falha controlada por referência ausente a helper de nome; corrigida antes de novo teste e sem alteração indevida da sessão. |
+| `376` | Geração real de PDF com dados fictícios e OpenAI aprovada | PASS; Gotenberg HTTP 200, PDF armazenado com 13.436 bytes, concessão criada, `delivery_status=ready`, `delivery_mode=dry_run` e `send_attempted=false`. |
+
+O HTML observado na execução `376` continha cabeçalho e títulos semânticos, regra de separação, acento teal e não continha `pre`. A inspeção visual foi feita em screenshot A4 do HTML efetivamente enviado ao Gotenberg; não houve clipping, sobreposição ou seção vazia. Nenhuma chave, token temporário ou dado real foi incluído no repositório.
