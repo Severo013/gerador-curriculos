@@ -36,3 +36,11 @@ Este arquivo registra decisões que outra sessão precisa conhecer para retomar 
 - E-mails são preservados como digitados e normalizados para minúsculas.
 - O objetivo aceita de 2 a 160 caracteres. Quando a pessoa responde `pular`, a propriedade `draft.objective` é omitida.
 - Estados e campos novos usam inglês. Registros legados com `inicio`, `nome`, `contato` e `draft.nome` são convertidos quando a conversa volta a ser processada.
+
+## 2026-11-16 — Representação de experiências
+
+- Relatos de experiência são preservados literalmente em `draft.experiences` como objetos `{ id, description }`.
+- Os IDs seguem a sequência `exp-1`, `exp-2` e assim por diante; eles servem para vincular futuras redações sem inventar fatos.
+- `first_job=true` representa uma declaração explícita de primeiro emprego. A lista de experiências permanece vazia.
+- A etapa `experience_more` pergunta se a pessoa quer adicionar outro relato antes de seguir para `education`.
+- O fluxo não deduz cargo, empresa, datas, resultados ou categoria profissional a partir do relato.
