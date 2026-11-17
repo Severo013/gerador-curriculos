@@ -355,6 +355,48 @@ O teste usou o artefato fictício já persistido. Nenhum envio externo foi reali
 3. Confirme `Load PDF Artifact=success`, `Prepare PDF Download=success`, `pdf_found=true`, MIME `application/pdf` e tamanho `13511`.
 4. Em uma chamada HTTP real, o último node (`Prepare PDF Download`) é o responsável pelo corpo binário da resposta.
 
+## Endpoint HTTP local para download do PDF — concluída em 2026-11-17
+
+### Escopo
+
+- Workflow n8n: `pdf-download`
+- ID da instância local: `B3EPlJjW6pFxf9dv`
+- Versão testada: `019cb06f-299a-41de-adcf-e64dbf353e48`
+- Estado de publicação: rascunho local, sem publicação solicitada ou realizada
+- Endpoint de laboratório: `POST /webhook/curriculo-pdf-dev`
+
+### Alterações
+
+- O download foi separado do workflow conversacional para manter a resposta do webhook de chat estável.
+- O endpoint recebe `{ "sender_id": "...", "artifact_id": "..." }` no corpo JSON.
+- A consulta SQL exige `artifact_id` e `sender_id` simultaneamente; um remetente diferente não consegue ler o artefato.
+- Artefato encontrado retorna HTTP 200, binário `application/pdf` e `Content-Disposition` com o nome seguro do arquivo.
+- Artefato inexistente ou pertencente a outro remetente retorna HTTP 404 com JSON em português.
+- O export sanitizado da versão testada está em `workflows/pdf-download.json`, sem credenciais, pin data ou payloads de teste.
+
+### Testes fictícios via MCP
+
+| Execução | Entrada | Resultado observado |
+|---|---|---|
+| `135` | Remetente `review-values-20261117b` e artefato persistido | `success`; ramo binário; PDF `renata-revisao.pdf`, `application/pdf`, `13511` bytes. |
+| `136` | Artefato `missing-artifact-20261117` | `success`; ramo de erro; resposta 404 com `pdf_found=false`. |
+| `137` | Artefato válido, mas `sender_id=other-sender-20261117` | `success`; consulta não encontrou registro; resposta 404, comprovando isolamento por remetente. |
+
+Todas as execuções foram manuais, com dados fictícios e sem envio externo. O endpoint continua sem autenticação porque está restrito ao laboratório local; ele não deve ser exposto publicamente nesta etapa.
+
+### Como reproduzir
+
+1. Confirme que o workflow `local-service` possui o artefato `review-values-20261117b-persist-db-4-renata-revisao.pdf` para `review-values-20261117b`.
+2. No MCP n8n, execute o workflow `B3EPlJjW6pFxf9dv` pelo node `PDF Download Webhook` com:
+   `{ "body": { "sender_id": "review-values-20261117b", "artifact_id": "review-values-20261117b-persist-db-4-renata-revisao.pdf" } }`.
+3. Confira `Respond PDF Binary`, o binário `data`, MIME `application/pdf`, tamanho `13511` e o cabeçalho `Content-Disposition`.
+4. Repita com `missing-artifact-20261117` ou com outro `sender_id` e confira `Respond Download Error` e o status 404.
+5. Para o teste HTTP pela interface do n8n, use a URL de teste `http://localhost:5678/webhook-test/curriculo-pdf-dev` enquanto o workflow estiver em modo de escuta.
+
+### Export oficial
+
+O MCP devolve o conteúdo da versão, mas não oferece export reimportável. O arquivo versionado é um espelho sanitizado; se for necessário o export oficial, baixe pela interface do n8n no workflow `pdf-download` e revise credenciais antes de versionar. Ao importar o espelho em outra instância, abra o node `Load PDF Artifact` e selecione a credencial PostgreSQL correspondente ao banco local.
+
 ## Próxima etapa sugerida
 
-Definir o contrato de entrega do binário recuperado (por exemplo, download protegido ou integração de canal), mantendo publicação e envios reais sob solicitação explícita.
+Adicionar autenticação para o endpoint de download (por exemplo, token de laboratório ou URL assinada) e cobrir a expiração do acesso antes de qualquer exposição fora da rede local. Publicação e envios reais continuam condicionados a uma solicitação explícita.

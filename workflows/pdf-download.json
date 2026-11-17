@@ -1,0 +1,196 @@
+{
+  "name": "pdf-download",
+  "nodes": [
+    {
+      "id": "49f8055a-27a0-424f-92c7-a3a62c19883a",
+      "name": "PDF Download Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        96
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "curriculo-pdf-dev",
+        "authentication": "none",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "b0ff843c-8304-482c-80ae-c694bb0436bb",
+      "name": "Load PDF Artifact",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        224,
+        96
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH artifact AS (\n  SELECT\n    artifact_id,\n    file_name,\n    mime_type,\n    encode(content_bytes, 'base64') AS content_base64,\n    octet_length(content_bytes) AS size_bytes\n  FROM resume_artifacts\n  WHERE artifact_id = $1\n    AND sender_id = $2\n)\nSELECT\n  $1::text AS requested_artifact_id,\n  $2::text AS sender_id,\n  artifact.artifact_id,\n  artifact.file_name,\n  artifact.mime_type,\n  artifact.content_base64,\n  artifact.size_bytes\nFROM (SELECT 1) AS request\nLEFT JOIN artifact ON TRUE;",
+        "options": {
+          "queryReplacement": "={{ [$json.body.artifact_id ?? $json.artifact_id, $json.body.sender_id ?? $json.sender_id] }}"
+        }
+      }
+    },
+    {
+      "id": "43563aab-a57e-4644-8b27-7b210e663cc6",
+      "name": "Prepare Download Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $input.item.json;\nconst artifactId = input.artifact_id ?? input.requested_artifact_id;\n\nif (!input.artifact_id || !input.content_base64) {\n  return {\n    json: {\n      sender_id: input.sender_id,\n      pdf_artifact_id: artifactId,\n      pdf_found: false,\n      status_code: 404,\n      reply: 'PDF não encontrado para este remetente.',\n    },\n  };\n}\n\nconst fileName = String(input.file_name || 'curriculo.pdf').replace(/[\\r\\n\"]/g, '_');\nconst fileExtension = fileName.split('.').pop() || 'pdf';\nconst sizeBytes = Number(input.size_bytes ?? 0);\n\nreturn {\n  json: {\n    sender_id: input.sender_id,\n    pdf_artifact_id: input.artifact_id,\n    pdf_filename: fileName,\n    pdf_mime_type: input.mime_type || 'application/pdf',\n    pdf_size_bytes: Number.isFinite(sizeBytes) ? sizeBytes : null,\n    pdf_found: true,\n    status_code: 200,\n    reply: 'PDF recuperado do armazenamento local.',\n  },\n  binary: {\n    data: {\n      data: input.content_base64,\n      mimeType: input.mime_type || 'application/pdf',\n      fileName,\n      fileExtension,\n      fileSize: Number.isFinite(sizeBytes) ? String(sizeBytes) : undefined,\n    },\n  },\n};"
+      }
+    },
+    {
+      "id": "62d7316d-4151-4c66-8b31-3d6eb72b9a41",
+      "name": "Check Artifact Found",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        672,
+        96
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.pdf_found }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "a96945d6-d8c2-47d8-9b42-8f5305967013",
+      "name": "Respond PDF Binary",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "respondWith": "binary",
+        "responseDataSource": "set",
+        "inputFieldName": "data",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Disposition",
+                "value": "={{ \"attachment; filename=\\\"\" + $json.pdf_filename + \"\\\"\" }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "={{ $json.pdf_mime_type }}"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "899136b7-87ed-4f90-b818-3fd2c63b1bc2",
+      "name": "Respond Download Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        896,
+        192
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 404,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "PDF Download Webhook": {
+      "main": [
+        [
+          {
+            "node": "Load PDF Artifact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load PDF Artifact": {
+      "main": [
+        [
+          {
+            "node": "Prepare Download Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Download Response": {
+      "main": [
+        [
+          {
+            "node": "Check Artifact Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Artifact Found": {
+      "main": [
+        [
+          {
+            "node": "Respond PDF Binary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Download Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  }
+}
+

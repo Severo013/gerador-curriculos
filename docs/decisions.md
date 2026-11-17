@@ -100,3 +100,13 @@ Este arquivo registra decisões que outra sessão precisa conhecer para retomar 
 - A consulta exige simultaneamente `artifact_id` e `sender_id`, evitando que uma conversa leia o artefato de outra.
 - O node `Prepare PDF Download` devolve o binário em `binary.data`, com MIME, nome e tamanho do registro persistido.
 - A recuperação não reconverte o currículo e não altera o artefato armazenado. O contrato de entrega por Meta ou outro canal fica para uma etapa posterior.
+
+## 2026-11-17 — Endpoint HTTP separado para entrega do PDF
+
+- O download HTTP foi colocado no workflow `pdf-download`, separado do `local-service`, para não misturar resposta binária com a resposta conversacional.
+- O contrato de laboratório é `POST /webhook/curriculo-pdf-dev` com `sender_id` e `artifact_id` no corpo JSON.
+- A consulta filtra pelos dois identificadores. Registro ausente ou pertencente a outro remetente produz 404, sem revelar se o artefato existe para outra sessão.
+- O ramo de sucesso usa `Respond to Webhook` com binário, `Content-Type` do registro e `Content-Disposition` de anexo; o ramo de erro responde JSON em português.
+- O endpoint permanece sem autenticação apenas porque está limitado ao laboratório local. Antes de expor a rede, é obrigatório adicionar token, URL assinada ou mecanismo equivalente.
+- A versão testada foi `019cb06f-299a-41de-adcf-e64dbf353e48`; o espelho sanitizado fica em `workflows/pdf-download.json`. O MCP não oferece export oficial reimportável, então o download oficial deve ser feito pela interface do workflow `pdf-download` quando necessário.
+- Ao importar o espelho em outra instância, a única configuração manual do workflow é selecionar a credencial PostgreSQL no node `Load PDF Artifact`.
