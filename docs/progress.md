@@ -35,7 +35,7 @@ As três execuções terminaram com status `success`. Os dados são inteiramente
 
 ### Próxima entrega sugerida
 
-Implementar a coleta de escolaridade, cursos e habilidades, incluindo campos opcionais e a opção `pular`.
+Implementar a revisão dos dados coletados, com resumo legível, correção por campo e confirmação antes da redação.
 
 ## Contato e objetivo — concluída em 2026-11-16
 
@@ -117,3 +117,40 @@ Todas as 14 execuções terminaram com status `success`. Os dados são fictício
 4. Envie um relato com pelo menos 5 caracteres e confirme `exp-1`.
 5. Responda `sim`, envie outro relato e confirme `exp-2`.
 6. Responda `não` e confirme o estado `education`.
+
+## Escolaridade, cursos e habilidades — concluída em 2026-11-17
+
+### Escopo
+
+- Workflow n8n: `local-service`
+- Versão de rascunho testada: `06510899-843d-4acc-94c9-0f864cc66cc4`
+- Versão publicada preservada: `8756df6d-2dca-4df3-ba5b-0b7ef00c61fe`
+- Estado de publicação: o rascunho foi testado; nenhuma publicação nova foi solicitada ou realizada.
+
+### Alterações
+
+- A etapa `education` agora coleta escolaridade opcional e preserva o texto em `draft.education`.
+- A etapa `courses` coleta um curso opcional em `draft.courses`.
+- A etapa `skills` coleta habilidades opcionais em `draft.skills`.
+- Entradas curtas são rejeitadas sem alterar o rascunho.
+- `pular`, `não tenho` e `nao tenho` avançam sem criar o campo correspondente.
+- O fluxo termina em `review_data`, que ainda é um placeholder para a revisão da próxima etapa.
+
+### Testes fictícios via MCP
+
+| Execuções | Caminho | Resultado observado |
+|---|---|---|
+| `55`–`62` | Marina Pula informa nome e e-mail, pula objetivo, primeiro emprego, escolaridade, cursos e habilidades | Todas terminaram com `success`; o estado final foi `review_data`, com `first_job=true` e campos opcionais ausentes. |
+| `63`–`73` | Rafael Estudos percorre o caminho com valores e entradas inválidas `x` | `68` permaneceu em `education`, `70` em `courses` e `72` em `skills`; os valores válidos foram preservados e `73` terminou em `review_data`. |
+| `74`–`81` | Beatriz Alternativa usa `não tenho`, `nao tenho` e `pular` nas etapas opcionais | Os três comandos foram aceitos como pular; `79` avançou para `courses`, `80` para `skills` e `81` terminou em `review_data`. |
+
+Todas as 27 execuções foram feitas com dados fictícios e terminaram com status `success`. Não houve chamadas a Meta, OpenAI, Gotenberg ou outros serviços externos.
+
+### Como reproduzir
+
+1. Use um `sender_id` novo e avance até `education`.
+2. Envie `x` e confirme que o estado permanece em `education`; depois envie uma escolaridade válida.
+3. Em `courses`, repita com `x` e depois um curso válido.
+4. Em `skills`, repita com `x` e depois uma lista de habilidades.
+5. Confirme que o último retorno está em `review_data` e que o rascunho contém `education`, `courses` e `skills`.
+6. Para o caminho opcional, responda `pular` nas três perguntas e confirme que os campos são omitidos.

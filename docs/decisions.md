@@ -44,3 +44,11 @@ Este arquivo registra decisões que outra sessão precisa conhecer para retomar 
 - `first_job=true` representa uma declaração explícita de primeiro emprego. A lista de experiências permanece vazia.
 - A etapa `experience_more` pergunta se a pessoa quer adicionar outro relato antes de seguir para `education`.
 - O fluxo não deduz cargo, empresa, datas, resultados ou categoria profissional a partir do relato.
+
+## 2026-11-17 — Escolaridade, cursos e habilidades
+
+- A etapa `education` aceita uma resposta livre de 2 a 160 caracteres e salva o texto original em `draft.education`.
+- A etapa `courses` aceita uma resposta livre de 2 a 300 caracteres e salva uma lista em `draft.courses`. Nesta etapa, a lista contém o relato original e ainda não classifica cursos.
+- A etapa `skills` aceita uma resposta livre de 2 a 300 caracteres e salva uma lista em `draft.skills`. Nesta etapa, a lista contém o relato original e ainda não normaliza habilidades.
+- Nas três etapas, `pular`, `não tenho` e `nao tenho` deixam o campo ausente e avançam para a próxima etapa.
+- Depois de habilidades, o estado `review_data` é apenas um marcador. A conferência, correção e confirmação dos dados serão implementadas na próxima etapa.
