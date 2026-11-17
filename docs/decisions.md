@@ -26,7 +26,7 @@ Este arquivo registra decisões que outra sessão precisa conhecer para retomar 
 
 - A versão testada do workflow fica em `workflows/service.json`.
 - Referências a credenciais da instância, metadados locais e dados fixados de teste não entram no arquivo versionado.
-- Ao importar o JSON, a credencial PostgreSQL precisa ser selecionada novamente nos dois nodes de banco.
+- Ao importar o JSON, a credencial PostgreSQL precisa ser selecionada novamente nos cinco nodes de banco: `Load Session`, `Save Session`, `Save PDF Metadata`, `Save PDF Artifact` e `Load PDF Artifact`.
 - O MCP disponível não possui uma operação de export reimportável. Quando houver uma alteração estrutural, o workflow `local-service` deve ser baixado pela interface e revisado antes do commit.
 
 ## 2026-11-16 — Representação de contato e objetivo
@@ -82,3 +82,21 @@ Este arquivo registra decisões que outra sessão precisa conhecer para retomar 
 
 - O PDF real foi baixado e conferido manualmente pelo usuário; conteúdo e formatação foram considerados corretos.
 - A próxima etapa é persistir o artefato localmente e registrar metadados de recuperação. Não haverá envio por Meta ou outro canal externo nessa etapa.
+
+## 2026-11-17 — Persistência do PDF no PostgreSQL local
+
+- O armazenamento primário do PDF é a tabela técnica `resume_artifacts`, com o conteúdo em `bytea` e chave `artifact_id`.
+- O identificador combina segmentos sanitizados de `sender_id`, `message_id` e `pdf_filename`; mensagens diferentes produzem artefatos diferentes.
+- `draft.pdf_storage_path` é uma URI lógica `db://resume_artifacts/<artifact_id>`, não um caminho do sistema de arquivos.
+- A migração oficial é `migrations/002_resume_artifacts.sql`. O node `Save PDF Artifact` também usa `CREATE TABLE IF NOT EXISTS` para permitir testes em uma base local ainda não migrada.
+- O n8n armazena binários grandes fora do JSON de execução; por isso o Code node usa `this.helpers.getBinaryDataBuffer(0, 'data')` e entrega Base64 parametrizado ao PostgreSQL. Não se deve usar `$binary.data.data` como se fosse o conteúdo.
+- O node `Save PDF Artifact` devolve tanto `reply` quanto `response`; isso mantém a mensagem humana disponível para `Save PDF Metadata` e para a resposta final do webhook.
+- A tentativa com `Read/Write Files from Disk` foi abandonada porque o ambiente atual não possui diretório gravável/montado para esse node. A decisão evita depender de montagem manual e mantém o artefato recuperável no banco local.
+- A etapa não publica o workflow e não envia o PDF a canais externos. A próxima decisão será o contrato de recuperação/download.
+
+## 2026-11-17 — Recuperação controlada do PDF
+
+- A recuperação usa o comando humano `baixar pdf` e reutiliza o `draft.pdf_artifact_id` da sessão; não aceita um identificador arbitrário vindo de outra sessão.
+- A consulta exige simultaneamente `artifact_id` e `sender_id`, evitando que uma conversa leia o artefato de outra.
+- O node `Prepare PDF Download` devolve o binário em `binary.data`, com MIME, nome e tamanho do registro persistido.
+- A recuperação não reconverte o currículo e não altera o artefato armazenado. O contrato de entrega por Meta ou outro canal fica para uma etapa posterior.

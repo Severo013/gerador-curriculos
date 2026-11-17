@@ -240,7 +240,7 @@ Todas as 6 execuções terminaram com status `success` e usaram dados fictícios
 - O pedido salva `draft.pdf_status=requested` e um nome de arquivo seguro, como `renata-revisao.pdf`.
 - O node `Check PDF Request` separa os pedidos de PDF do caminho de resposta normal.
 - O node `Convert PDF with Gotenberg` envia `pdf_html_file` como campo binário `files` em multipart para `http://gotenberg:3000/forms/chromium/convert/html` e espera um arquivo binário em `data`.
-- O JSON versionado em `workflows/service.json` contém sete nodes e não contém credenciais, dados fixados de execução ou metadados locais.
+- O JSON versionado em `workflows/service.json` contém o espelho sanitizado da versão testada e não contém credenciais, dados fixados de execução ou metadados locais.
 
 ### Testes fictícios via MCP
 
@@ -276,4 +276,85 @@ O PDF da execução real foi baixado e conferido manualmente; o conteúdo e a fo
 
 ### Critério de aceite
 
-Uma execução fictícia em `draft_approved` deve gerar um PDF, persistir exatamente um arquivo local recuperável e salvar no estado da sessão os metadados correspondentes. Uma segunda solicitação deve produzir um artefato identificável sem sobrescrever silenciosamente o anterior.
+Uma execução fictícia em `draft_approved` deve gerar um PDF, persistir exatamente um artefato recuperável no armazenamento local e salvar no estado da sessão os metadados correspondentes. Uma segunda solicitação deve produzir um artefato identificável sem sobrescrever silenciosamente o anterior.
+
+## Persistência do artefato PDF no PostgreSQL — concluída em 2026-11-17
+
+### Escopo
+
+- Workflow n8n: `local-service`
+- Versão de rascunho testada: `83bac21a-2618-45d5-929e-931d212de473`
+- Versão publicada preservada: `8756df6d-2dca-4df3-ba5b-0b7ef00c61fe`
+- Estado de publicação: o rascunho foi testado; nenhuma publicação nova foi solicitada ou realizada.
+
+### Alterações
+
+- A persistência deixou de usar `Read/Write Files from Disk`, pois a instância n8n não expõe um diretório gravável para esse node no ambiente atual.
+- A migração `migrations/002_resume_artifacts.sql` cria a tabela `resume_artifacts` com o PDF em `bytea`.
+- O Code node gera `draft.pdf_artifact_id` determinístico por remetente, mensagem e nome seguro do arquivo.
+- O campo `draft.pdf_storage_path` passa a ser uma URI lógica `db://resume_artifacts/<artifact_id>`.
+- `Save PDF Artifact` cria a tabela como fallback idempotente, grava o Base64 do binário convertido e retorna o tamanho real.
+- `Save PDF Metadata` grava `pdf_status=stored`, MIME, tamanho e data no rascunho da sessão.
+
+### Testes fictícios via MCP
+
+| Execução | Resultado observado |
+|---|---|
+| `126` | O Gotenberg converteu o PDF e `Mark PDF Stored` marcou `stored`, mas o primeiro INSERT falhou porque `$binary.data.data` era apenas o marcador `filesystem-v2`. |
+| `127` | Sucesso; `Save PDF Artifact` retornou `artifact_id=review-values-20261117b-persist-db-2-renata-revisao.pdf` e `pdf_size_bytes=13511`. `Save PDF Metadata` persistiu os mesmos metadados. |
+| `128` | Sucesso; uma segunda mensagem gerou o artefato distinto `review-values-20261117b-persist-db-3-renata-revisao.pdf`, também com 13511 bytes. |
+| `129` | Sucesso; repetir a mesma mensagem reutilizou o mesmo `artifact_id`, confirmando o `ON CONFLICT` idempotente. |
+| `130` | Sucesso no caminho sem PDF; `Check PDF Request` seguiu pela saída falsa e `Save Session` manteve o fluxo conversacional normal. |
+| `131` | Sucesso após corrigir o alias de retorno; `Save PDF Metadata` devolveu a mensagem humana em `response`, além dos metadados persistidos. |
+
+As execuções usaram dados fictícios, o Gotenberg local real e o PostgreSQL local. A tabela foi criada pelo fallback idempotente do node durante o teste `127`; a migração permanece como caminho canônico para novos ambientes. Nenhuma mensagem foi enviada à Meta, e a falha `126` foi corrigida antes da conclusão da etapa.
+
+### Como reproduzir
+
+1. Confirme que a sessão fictícia `review-values-20261117b` está em `draft_approved` com `generated_resume.status=approved`.
+2. Execute o workflow pelo node `Webhook` com `{ "body": { "sender_id": "review-values-20261117b", "message_id": "persist-db-repro-1", "text": "gerar pdf" } }`.
+3. Confira os nodes `Convert PDF with Gotenberg`, `Mark PDF Stored`, `Save PDF Artifact` e `Save PDF Metadata` com status `success`.
+4. Verifique `artifact_id`, `pdf_size_bytes > 0`, `pdf_status=stored` e a URI `db://resume_artifacts/...` no retorno do artefato e na sessão.
+5. Repita com outro `message_id` e confirme que o `artifact_id` muda sem sobrescrever o primeiro.
+
+### Limitação conhecida
+
+O MCP n8n não oferece export reimportável. O arquivo `workflows/service.json` é um espelho sanitizado da versão testada; se for necessário baixar o export oficial, use a interface do n8n no workflow `local-service` e revise credenciais antes de versionar.
+
+## Recuperação do artefato PDF — concluída em 2026-11-17
+
+### Escopo
+
+- Workflow n8n: `local-service`
+- Versão de rascunho testada: `51f26bde-4bcb-44be-801b-3d3272a60bf6`
+- Versão publicada preservada: `8756df6d-2dca-4df3-ba5b-0b7ef00c61fe`
+- Estado de publicação: o rascunho foi testado; nenhuma publicação nova foi solicitada ou realizada.
+
+### Alterações
+
+- O comando humano `baixar pdf` (e aliases em inglês) agora recupera o `artifact_id` armazenado na sessão.
+- `Check PDF Retrieval` separa a recuperação do caminho de geração/conversão.
+- `Load PDF Artifact` consulta `resume_artifacts` por `artifact_id` e `sender_id`, evitando acesso cruzado entre sessões.
+- `Prepare PDF Download` transforma o Base64 retornado pelo PostgreSQL em binário `application/pdf` com nome e tamanho preservados.
+- O caminho de geração continua usando Gotenberg; o caminho de recuperação não reconverte nem cria um novo artefato.
+
+### Testes fictícios via MCP
+
+| Execução | Resultado observado |
+|---|---|
+| `132` | O ramo foi acionado, mas revelou que o `artifact_id` não era propagado para a consulta; não houve leitura do PDF. |
+| `133` | Sucesso após a correção; `Load PDF Artifact` retornou o artefato `review-values-20261117b-persist-db-4-renata-revisao.pdf` com 13511 bytes e `Prepare PDF Download` devolveu binário PDF. |
+| `134` | Sucesso no caminho conversacional sem PDF; os dois nodes de decisão seguiram pelas saídas falsas. |
+
+O teste usou o artefato fictício já persistido. Nenhum envio externo foi realizado e não houve nova conversão pelo Gotenberg.
+
+### Como reproduzir
+
+1. Use a sessão `review-values-20261117b`, que possui `draft.pdf_status=stored`.
+2. Execute o Webhook com `{ "body": { "sender_id": "review-values-20261117b", "message_id": "download-repro-1", "text": "baixar pdf" } }`.
+3. Confirme `Load PDF Artifact=success`, `Prepare PDF Download=success`, `pdf_found=true`, MIME `application/pdf` e tamanho `13511`.
+4. Em uma chamada HTTP real, o último node (`Prepare PDF Download`) é o responsável pelo corpo binário da resposta.
+
+## Próxima etapa sugerida
+
+Definir o contrato de entrega do binário recuperado (por exemplo, download protegido ou integração de canal), mantendo publicação e envios reais sob solicitação explícita.

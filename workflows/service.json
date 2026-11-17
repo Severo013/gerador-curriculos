@@ -15,8 +15,7 @@
         0
       ],
       "id": "3ba917d1-9b2d-41d3-8fa4-696090ab20e0",
-      "name": "Webhook",
-      "webhookId": "add437f5-b141-4bbd-bd0c-b7833885762b"
+      "name": "Webhook"
     },
     {
       "parameters": {
@@ -34,6 +33,37 @@
       ],
       "id": "21ae1069-bb97-4ccc-a17f-d8f2e63d3a00",
       "name": "Load Session"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const input = $('Input').item.json;\nconst text = String(input.text ?? '').trim();\nconst command = text.toLocaleLowerCase('pt-BR').replace(/[.!?]+$/g, '').trim();\nconst stageAliases = {\n  inicio: 'start',\n  nome: 'name',\n  contato: 'contact',\n};\nconst reviewFieldAliases = {\n  nome: 'name',\n  contato: 'contact',\n  telefone: 'contact',\n  email: 'contact',\n  'e-mail': 'contact',\n  objetivo: 'objective',\n  escolaridade: 'education',\n  curso: 'courses',\n  cursos: 'courses',\n  habilidade: 'skills',\n  habilidades: 'skills',\n  experiencia: 'experiences',\n  experiencias: 'experiences',\n  experiência: 'experiences',\n  experiências: 'experiences',\n};\nconst reviewFieldLabels = {\n  name: 'nome',\n  contact: 'contato',\n  objective: 'objetivo',\n  experiences: 'experiência profissional',\n  education: 'escolaridade',\n  courses: 'cursos',\n  skills: 'habilidades',\n};\nconst optionalReviewFields = new Set([\n  'objective',\n  'experiences',\n  'education',\n  'courses',\n  'skills',\n]);\n\nlet stage = stageAliases[$json.stage] ?? $json.stage ?? 'start';\nconst draft = { ...($json.draft ?? {}) };\n\nif (draft.nome && !draft.name) {\n  draft.name = draft.nome;\n}\ndelete draft.nome;\n\nfunction normalizeBrazilianPhone(value) {\n  let digits = value.replace(/\\D/g, '');\n\n  if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) {\n    digits = digits.slice(2);\n  }\n\n  if (![10, 11].includes(digits.length)) {\n    return null;\n  }\n\n  if (digits.startsWith('0') || /^(\\d)\\1+$/.test(digits)) {\n    return null;\n  }\n\n  return '+55' + digits;\n}\n\nfunction isValidEmail(value) {\n  return value.length <= 254 && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$/.test(value);\n}\n\nfunction isValidExperience(value) {\n  return value.length >= 5 && value.length <= 1000;\n}\n\nfunction isValidField(value, maximum) {\n  return value.length >= 2 && value.length <= maximum;\n}\n\nfunction isSkipCommand(value) {\n  return value === 'pular' || value === 'não tenho' || value === 'nao tenho';\n}\n\nfunction formatContact(value) {\n  if (!value) {\n    return 'não informado';\n  }\n\n  return value.value ?? value.normalized ?? 'não informado';\n}\n\nfunction formatList(value) {\n  if (!Array.isArray(value) || value.length === 0) {\n    return 'não informado';\n  }\n\n  return value\n    .map(item => typeof item === 'string' ? item : item.description ?? '')\n    .filter(Boolean)\n    .join('; ') || 'não informado';\n}\n\nfunction formatExperiences() {\n  if (draft.first_job === true && (!Array.isArray(draft.experiences) || draft.experiences.length === 0)) {\n    return 'primeiro emprego';\n  }\n\n  return formatList(draft.experiences);\n}\n\nfunction buildReviewSummary() {\n  const lines = [\n    'Confira seus dados:',\n    'Nome: ' + (draft.name || 'não informado'),\n    'Contato: ' + formatContact(draft.contact),\n    'Objetivo: ' + (draft.objective || 'não informado'),\n    'Experiência: ' + formatExperiences(),\n    'Escolaridade: ' + (draft.education || 'não informado'),\n    'Cursos: ' + formatList(draft.courses),\n    'Habilidades: ' + formatList(draft.skills),\n  ];\n\n  return lines.join('\\n') + '\\n\\nResponda \"confirmar\" se estiver tudo certo ou \"corrigir <campo>\" para alterar um dado.';\n}\n\nfunction isDraftCommand(value) {\n  return [\n    'gerar',\n    'redigir',\n    'gerar currículo',\n    'gerar curriculo',\n    'criar currículo',\n    'criar curriculo',\n  ].includes(value);\n}\n\nfunction buildResumeDraft() {\n  const lines = [\n    (draft.name || 'Nome não informado').toLocaleUpperCase('pt-BR'),\n    'Contato: ' + formatContact(draft.contact),\n    '',\n    'OBJETIVO',\n    draft.objective || 'Não informado',\n    '',\n    'EXPERIÊNCIA',\n    formatExperiences(),\n    '',\n    'ESCOLARIDADE',\n    draft.education || 'Não informado',\n    '',\n    'CURSOS',\n    formatList(draft.courses),\n    '',\n    'HABILIDADES',\n    formatList(draft.skills),\n  ];\n\n  return lines.join('\\n');\n}\n\nfunction buildDraftReply() {\n  return 'Rascunho atual (modelo determinístico, sem inventar informações):\\n\\n' +\n    draft.generated_resume.text +\n    '\\n\\nResponda \"aprovar\" para continuar ou \"corrigir <campo>\" para voltar à revisão.';\n}\n\nfunction generateDraft() {\n  const resumeText = buildResumeDraft();\n\n  draft.generated_resume = {\n    status: 'preview',\n    method: 'deterministic_template_v1',\n    text: resumeText,\n  };\n  stage = 'draft_ready';\n\n  return 'Rascunho gerado (modelo determinístico, sem inventar informações):\\n\\n' +\n    resumeText +\n    '\\n\\nResponda \"aprovar\" para continuar ou \"corrigir <campo>\" para voltar à revisão.';\n}\n\nfunction isPdfCommand(value) {\n  return [\n    'pdf',\n    'gerar pdf',\n    'gerar currículo em pdf',\n    'gerar curriculo em pdf',\n    'criar pdf',\n  ].includes(value);\n}\n\nfunction isPdfRetrievalCommand(value) {\n  return [\n    'baixar pdf',\n    'download pdf',\n    'baixar currículo',\n    'baixar curriculo',\n  ].includes(value);\n}\n\nfunction requestPdfRetrieval() {\n  if (draft.pdf_status !== 'stored' || !draft.pdf_artifact_id) {\n    return 'Ainda não há um PDF armazenado. Responda \"gerar PDF\" para criar o arquivo.';\n  }\n\n  pdfRetrievalRequested = true;\n  pdfArtifactId = draft.pdf_artifact_id;\n  pdfStoragePath = draft.pdf_storage_path ?? 'db://resume_artifacts/' + draft.pdf_artifact_id;\n  return 'PDF localizado. Preparando o download do arquivo.';\n}\n\nfunction escapeHtml(value) {\n  return String(value).replace(/[&<>\"']/g, character => ({\n    '&': '&amp;',\n    '<': '&lt;',\n    '>': '&gt;',\n    '\"': '&quot;',\n    \"'\": '&#39;',\n  }[character]));\n}\n\nfunction buildPdfFilename() {\n  const baseName = (draft.name || 'curriculo')\n    .toLocaleLowerCase('pt-BR')\n    .normalize('NFD')\n    .replace(/[\\u0300-\\u036f]/g, '')\n    .replace(/[^a-z0-9]+/g, '-')\n    .replace(/^-+|-+$/g, '') || 'curriculo';\n\n  return baseName + '.pdf';\n}\n\nfunction buildPdfArtifactId(filename) {\n  const senderSegment = String(input.sender_id || 'sender')\n    .toLocaleLowerCase('pt-BR')\n    .normalize('NFD')\n    .replace(/[\\u0300-\\u036f]/g, '')\n    .replace(/[^a-z0-9]+/g, '-')\n    .replace(/^-+|-+$/g, '') || 'sender';\n  const messageSegment = String(input.message_id || Date.now())\n    .toLocaleLowerCase('pt-BR')\n    .normalize('NFD')\n    .replace(/[\\u0300-\\u036f]/g, '')\n    .replace(/[^a-z0-9]+/g, '-')\n    .replace(/^-+|-+$/g, '') || String(Date.now());\n  const filenameSegment = String(filename)\n    .toLocaleLowerCase('pt-BR')\n    .replace(/[^a-z0-9.-]+/g, '-')\n    .replace(/^-+|-+$/g, '') || 'curriculo.pdf';\n\n  return senderSegment + '-' + messageSegment + '-' + filenameSegment;\n}\n\nfunction buildPdfHtml() {\n  const resumeText = draft.generated_resume?.text ?? buildResumeDraft();\n  const escapedText = escapeHtml(resumeText);\n\n  return '<!doctype html><html lang=\"pt-BR\"><head><meta charset=\"utf-8\">' +\n    '<style>body{font-family:Arial,sans-serif;color:#222;margin:48px}pre{font-family:Arial,sans-serif;white-space:pre-wrap;line-height:1.45;font-size:12pt}</style>' +\n    '</head><body><pre>' + escapedText + '</pre></body></html>';\n}\n\nfunction requestPdf() {\n  const html = buildPdfHtml();\n  const filename = buildPdfFilename();\n  const artifactId = buildPdfArtifactId(filename);\n  const storagePath = 'db://resume_artifacts/' + artifactId;\n\n  pdfRequested = true;\n  pdfHtml = html;\n  pdfHtmlBinary = {\n    data: Buffer.from(html, 'utf8').toString('base64'),\n    mimeType: 'text/html',\n    fileName: 'index.html',\n    fileExtension: 'html',\n  };\n  pdfFilename = filename;\n  pdfArtifactId = artifactId;\n  pdfStoragePath = storagePath;\n  draft.pdf_status = 'requested';\n  draft.pdf_filename = filename;\n  draft.pdf_artifact_id = artifactId;\n  draft.pdf_storage_path = storagePath;\n  stage = 'pdf_requested';\n\n  return 'PDF solicitado. A conversão usa o Gotenberg local e será entregue como arquivo.';\n}\n\nfunction askEducation() {\n  stage = 'education';\n  return 'Qual é sua escolaridade? Você pode informar se está estudando ou responder \"pular\".';\n}\n\nfunction askCourses() {\n  stage = 'courses';\n  return 'Você fez algum curso? Informe o nome ou responda \"pular\".';\n}\n\nfunction askSkills() {\n  stage = 'skills';\n  return 'Quais habilidades você quer destacar? Liste-as ou responda \"pular\".';\n}\n\nfunction askReview() {\n  stage = 'review_data';\n  return buildReviewSummary();\n}\n\nfunction finishCollection() {\n  delete draft.review_status;\n  delete draft.pending_review_field;\n  return askReview();\n}\n\nconst experiences = Array.isArray(draft.experiences) ? [...draft.experiences] : [];\nif (Array.isArray(draft.experiencias) && experiences.length === 0) {\n  experiences.push(...draft.experiencias);\n}\ndelete draft.experiencias;\n\nfunction addExperience(description) {\n  experiences.push({\n    id: 'exp-' + (experiences.length + 1),\n    description,\n  });\n  draft.experiences = experiences;\n  delete draft.first_job;\n}\n\nfunction parseReviewField(value) {\n  const match = value.match(/^(?:corrigir|editar|alterar)\\s+(.+)$/);\n\n  if (!match) {\n    return null;\n  }\n\n  return reviewFieldAliases[match[1].trim()] ?? null;\n}\n\nfunction askCorrection(field) {\n  const optionalHint = optionalReviewFields.has(field) ? ' Responda \"pular\" para remover esse campo.' : '';\n  stage = 'review_edit';\n  return 'Qual é o novo valor de ' + reviewFieldLabels[field] + '?' + optionalHint;\n}\n\nfunction completeReviewEdit() {\n  delete draft.pending_review_field;\n  delete draft.review_status;\n  return askReview();\n}\n\nfunction applyReviewEdit(field) {\n  if (isSkipCommand(command)) {\n    if (optionalReviewFields.has(field)) {\n      if (field === 'experiences') {\n        draft.experiences = [];\n        draft.first_job = true;\n      } else {\n        delete draft[field];\n      }\n      return null;\n    }\n\n    return 'Esse campo é obrigatório. Envie um valor válido para ' + reviewFieldLabels[field] + '.';\n  }\n\n  if (field === 'name') {\n    if (!isValidField(text, 120)) {\n      return 'Envie um nome com até 120 caracteres.';\n    }\n\n    draft.name = text;\n    return null;\n  }\n\n  if (field === 'contact') {\n    const normalizedPhone = normalizeBrazilianPhone(text);\n\n    if (isValidEmail(text)) {\n      draft.contact = {\n        type: 'email',\n        value: text,\n        normalized: text.toLocaleLowerCase('pt-BR'),\n      };\n      return null;\n    }\n\n    if (normalizedPhone) {\n      draft.contact = {\n        type: 'phone',\n        value: text,\n        normalized: normalizedPhone,\n      };\n      return null;\n    }\n\n    return 'Não reconheci esse contato. Envie um telefone com DDD ou um e-mail válido.';\n  }\n\n  if (field === 'objective' || field === 'education') {\n    const maximum = field === 'objective' ? 160 : 160;\n\n    if (!isValidField(text, maximum)) {\n      return 'Envie ' + reviewFieldLabels[field] + ' com até ' + maximum + ' caracteres.';\n    }\n\n    draft[field] = text;\n    return null;\n  }\n\n  if (field === 'courses' || field === 'skills') {\n    if (!isValidField(text, 300)) {\n      return 'Envie ' + reviewFieldLabels[field] + ' com até 300 caracteres.';\n    }\n\n    draft[field] = [text];\n    return null;\n  }\n\n  if (field === 'experiences') {\n    if (!isValidExperience(text)) {\n      return 'Envie uma experiência com pelo menos 5 caracteres e até 1000 caracteres.';\n    }\n\n    draft.experiences = [{\n      id: 'exp-1',\n      description: text,\n    }];\n    delete draft.first_job;\n    return null;\n  }\n\n  return 'Não reconheci o campo para correção.';\n}\n\nlet pdfRequested = false;\nlet pdfHtml = null;\nlet pdfHtmlBinary = null;\nlet pdfFilename = null;\nlet pdfArtifactId = null;\nlet pdfStoragePath = null;\nlet pdfRetrievalRequested = false;\n\nlet reply = 'Responda com seu nome para continuar.';\n\nif (stage === 'start') {\n  stage = 'name';\n  reply = 'Oi! Qual nome deve aparecer no currículo?';\n} else if (stage === 'name') {\n  if (text.length > 0 && text.length <= 120) {\n    draft.name = text;\n    stage = 'contact';\n    reply = 'Qual telefone ou e-mail você quer colocar no currículo?';\n  } else {\n    reply = 'Envie um nome com até 120 caracteres para continuar.';\n  }\n} else if (stage === 'contact') {\n  const normalizedPhone = normalizeBrazilianPhone(text);\n\n  if (isValidEmail(text)) {\n    draft.contact = {\n      type: 'email',\n      value: text,\n      normalized: text.toLocaleLowerCase('pt-BR'),\n    };\n    stage = 'objective';\n    reply = 'Que tipo de trabalho você procura? Se preferir, responda \"pular\".';\n  } else if (normalizedPhone) {\n    draft.contact = {\n      type: 'phone',\n      value: text,\n      normalized: normalizedPhone,\n    };\n    stage = 'objective';\n    reply = 'Que tipo de trabalho você procura? Se preferir, responda \"pular\".';\n  } else {\n    reply = 'Não reconheci esse contato. Envie um telefone com DDD ou um e-mail válido.';\n  }\n} else if (stage === 'objective') {\n  if (command === 'pular') {\n    delete draft.objective;\n    stage = 'experience';\n    reply = 'Você já trabalhou, fez algum bico ou ajudou em um negócio da família? Conte o que fazia ou responda \"primeiro emprego\".';\n  } else if (isValidField(text, 160)) {\n    draft.objective = text;\n    stage = 'experience';\n    reply = 'Você já trabalhou, fez algum bico ou ajudou em um negócio da família? Conte o que fazia ou responda \"primeiro emprego\".';\n  } else {\n    reply = 'Descreva o objetivo em até 160 caracteres ou responda \"pular\".';\n  }\n} else if (stage === 'experience') {\n  if (command === 'primeiro emprego' || command === 'pular') {\n    draft.experiences = experiences;\n    draft.first_job = true;\n    reply = askEducation();\n  } else if (isValidExperience(text)) {\n    addExperience(text);\n    stage = 'experience_more';\n    reply = 'Quer adicionar outra experiência? Responda \"sim\" ou \"não\".';\n  } else {\n    reply = 'Conte uma experiência com pelo menos 5 caracteres, ou responda \"primeiro emprego\".';\n  }\n} else if (stage === 'experience_more') {\n  if (command === 'sim' || command === 'adicionar' || command === 'adicionar outra') {\n    stage = 'experience_additional';\n    reply = 'Conte outra experiência: o que você fazia?';\n  } else if (command === 'não' || command === 'nao' || command === 'pular') {\n    reply = askEducation();\n  } else {\n    reply = 'Responda \"sim\" para adicionar outra experiência ou \"não\" para continuar.';\n  }\n} else if (stage === 'experience_additional') {\n  if (command === 'não' || command === 'nao' || command === 'pular') {\n    reply = askEducation();\n  } else if (isValidExperience(text)) {\n    addExperience(text);\n    stage = 'experience_more';\n    reply = 'Quer adicionar outra experiência? Responda \"sim\" ou \"não\".';\n  } else {\n    reply = 'Conte uma experiência com pelo menos 5 caracteres, ou responda \"não\" para continuar.';\n  }\n} else if (stage === 'education') {\n  if (isSkipCommand(command)) {\n    delete draft.education;\n    reply = askCourses();\n  } else if (isValidField(text, 160)) {\n    draft.education = text;\n    reply = askCourses();\n  } else {\n    reply = 'Informe sua escolaridade em até 160 caracteres ou responda \"pular\".';\n  }\n} else if (stage === 'courses') {\n  if (isSkipCommand(command)) {\n    delete draft.courses;\n    reply = askSkills();\n  } else if (isValidField(text, 300)) {\n    draft.courses = [text];\n    reply = askSkills();\n  } else {\n    reply = 'Informe o curso em até 300 caracteres ou responda \"pular\".';\n  }\n} else if (stage === 'skills') {\n  if (isSkipCommand(command)) {\n    delete draft.skills;\n    reply = finishCollection();\n  } else if (isValidField(text, 300)) {\n    draft.skills = [text];\n    reply = finishCollection();\n  } else {\n    reply = 'Informe suas habilidades em até 300 caracteres ou responda \"pular\".';\n  }\n} else if (stage === 'review_data') {\n  const requestedField = parseReviewField(command);\n\n  if (command === 'confirmar' || command === 'confirmado' || command === 'sim' || command === 'ok') {\n    draft.review_status = 'confirmed';\n    delete draft.pending_review_field;\n    stage = 'ready_for_drafting';\n    reply = 'Dados confirmados. O currículo está pronto para a próxima etapa de redação.';\n  } else if (requestedField) {\n    delete draft.review_status;\n    draft.pending_review_field = requestedField;\n    reply = askCorrection(requestedField);\n  } else {\n    reply = buildReviewSummary();\n  }\n} else if (stage === 'review_edit') {\n  const pendingField = draft.pending_review_field;\n\n  if (!pendingField) {\n    reply = askReview();\n  } else if (command === 'cancelar' || command === 'voltar') {\n    delete draft.pending_review_field;\n    reply = askReview();\n  } else {\n    const editError = applyReviewEdit(pendingField);\n\n    if (editError) {\n      reply = editError;\n    } else {\n      reply = completeReviewEdit();\n    }\n  }\n} else if (stage === 'ready_for_drafting') {\n  const requestedField = parseReviewField(command);\n\n  if (requestedField) {\n    delete draft.review_status;\n    draft.pending_review_field = requestedField;\n    reply = askCorrection(requestedField);\n  } else if (isDraftCommand(command)) {\n    reply = generateDraft();\n  } else {\n    reply = 'Dados confirmados. Responda \"gerar currículo\" para criar o rascunho.';\n  }\n} else if (stage === 'draft_ready') {\n  const requestedField = parseReviewField(command);\n\n  if (command === 'aprovar' || command === 'aprovado' || command === 'confirmar') {\n    draft.generated_resume.status = 'approved';\n    stage = 'draft_approved';\n    reply = 'Rascunho aprovado. Ele está pronto para a próxima etapa de PDF.';\n  } else if (requestedField) {\n    delete draft.generated_resume;\n    delete draft.review_status;\n    draft.pending_review_field = requestedField;\n    reply = askCorrection(requestedField);\n  } else if (isDraftCommand(command)) {\n    reply = generateDraft();\n  } else {\n    reply = buildDraftReply();\n  }\n} else if (stage === 'draft_approved') {\n  const requestedField = parseReviewField(command);\n\n  if (isPdfRetrievalCommand(command)) {\n    reply = requestPdfRetrieval();\n  } else if (isPdfCommand(command)) {\n    reply = requestPdf();\n  } else if (requestedField) {\n    delete draft.generated_resume;\n    delete draft.review_status;\n    draft.pending_review_field = requestedField;\n    reply = askCorrection(requestedField);\n  } else {\n    reply = 'Rascunho aprovado. Responda \"gerar PDF\" para solicitar o arquivo.';\n  }\n} else if (stage === 'pdf_requested') {\n  if (isPdfRetrievalCommand(command)) {\n    reply = requestPdfRetrieval();\n  } else if (isPdfCommand(command)) {\n    reply = requestPdf();\n  } else {\n    reply = 'O PDF já foi solicitado. Aguarde a conversão pelo Gotenberg local.';\n  }\n} else {\n  reply = 'Não consegui identificar a etapa atual. Tente novamente.';\n}\n\nconst output = {\n  json: {\n    sender_id: input.sender_id,\n    stage,\n    draft,\n    revision: $json.revision,\n    reply,\n    pdf_requested: pdfRequested,\n    pdf_html: pdfHtml,\n    pdf_filename: pdfFilename,\n    pdf_artifact_id: pdfArtifactId,\n    pdf_storage_path: pdfStoragePath,\n    pdf_retrieval_requested: pdfRetrievalRequested,\n  },\n};\n\nif (pdfHtmlBinary) {\n  output.binary = {\n    pdf_html_file: pdfHtmlBinary,\n  };\n}\n\nreturn output;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        592,
+        0
+      ],
+      "id": "53b711a1-47a2-433e-80bd-cd91aded0102",
+      "name": "Process Conversation"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO sessions (sender_id, stage, draft, revision)\nVALUES ($1, $2, $3::jsonb, $4)\nON CONFLICT (sender_id) DO UPDATE SET\n  stage = EXCLUDED.stage,\n  draft = EXCLUDED.draft,\n  revision = EXCLUDED.revision,\n  updated_at = now()\nRETURNING stage, draft, revision, $5::text AS response;",
+        "options": {
+          "queryReplacement": "={{ [$json.sender_id, $json.stage, JSON.stringify($json.draft), $json.revision, $json.reply] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        784,
+        0
+      ],
+      "id": "7bc3fefc-feec-47e8-a974-5744c67b15e3",
+      "name": "Save Session"
     },
     {
       "parameters": {
@@ -69,20 +99,6 @@
       ],
       "id": "023d4738-dc64-47d2-a39d-4613c03ef30b",
       "name": "Input"
-    },
-    {
-      "parameters": {
-        "mode": "runOnceForEachItem",
-        "jsCode": "const input = $('Input').item.json;\nconst text = String(input.text ?? '').trim();\nconst command = text.toLocaleLowerCase('pt-BR').replace(/[.!?]+$/g, '').trim();\nconst stageAliases = {\n  inicio: 'start',\n  nome: 'name',\n  contato: 'contact',\n};\nconst reviewFieldAliases = {\n  nome: 'name',\n  contato: 'contact',\n  telefone: 'contact',\n  email: 'contact',\n  'e-mail': 'contact',\n  objetivo: 'objective',\n  escolaridade: 'education',\n  curso: 'courses',\n  cursos: 'courses',\n  habilidade: 'skills',\n  habilidades: 'skills',\n  experiencia: 'experiences',\n  experiencias: 'experiences',\n  experiência: 'experiences',\n  experiências: 'experiences',\n};\nconst reviewFieldLabels = {\n  name: 'nome',\n  contact: 'contato',\n  objective: 'objetivo',\n  experiences: 'experiência profissional',\n  education: 'escolaridade',\n  courses: 'cursos',\n  skills: 'habilidades',\n};\nconst optionalReviewFields = new Set([\n  'objective',\n  'experiences',\n  'education',\n  'courses',\n  'skills',\n]);\n\nlet stage = stageAliases[$json.stage] ?? $json.stage ?? 'start';\nconst draft = { ...($json.draft ?? {}) };\n\nif (draft.nome && !draft.name) {\n  draft.name = draft.nome;\n}\ndelete draft.nome;\n\nfunction normalizeBrazilianPhone(value) {\n  let digits = value.replace(/\\D/g, '');\n\n  if ((digits.length === 12 || digits.length === 13) && digits.startsWith('55')) {\n    digits = digits.slice(2);\n  }\n\n  if (![10, 11].includes(digits.length)) {\n    return null;\n  }\n\n  if (digits.startsWith('0') || /^(\\d)\\1+$/.test(digits)) {\n    return null;\n  }\n\n  return '+55' + digits;\n}\n\nfunction isValidEmail(value) {\n  return value.length <= 254 && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$/.test(value);\n}\n\nfunction isValidExperience(value) {\n  return value.length >= 5 && value.length <= 1000;\n}\n\nfunction isValidField(value, maximum) {\n  return value.length >= 2 && value.length <= maximum;\n}\n\nfunction isSkipCommand(value) {\n  return value === 'pular' || value === 'não tenho' || value === 'nao tenho';\n}\n\nfunction formatContact(value) {\n  if (!value) {\n    return 'não informado';\n  }\n\n  return value.value ?? value.normalized ?? 'não informado';\n}\n\nfunction formatList(value) {\n  if (!Array.isArray(value) || value.length === 0) {\n    return 'não informado';\n  }\n\n  return value\n    .map(item => typeof item === 'string' ? item : item.description ?? '')\n    .filter(Boolean)\n    .join('; ') || 'não informado';\n}\n\nfunction formatExperiences() {\n  if (draft.first_job === true && (!Array.isArray(draft.experiences) || draft.experiences.length === 0)) {\n    return 'primeiro emprego';\n  }\n\n  return formatList(draft.experiences);\n}\n\nfunction buildReviewSummary() {\n  const lines = [\n    'Confira seus dados:',\n    'Nome: ' + (draft.name || 'não informado'),\n    'Contato: ' + formatContact(draft.contact),\n    'Objetivo: ' + (draft.objective || 'não informado'),\n    'Experiência: ' + formatExperiences(),\n    'Escolaridade: ' + (draft.education || 'não informado'),\n    'Cursos: ' + formatList(draft.courses),\n    'Habilidades: ' + formatList(draft.skills),\n  ];\n\n  return lines.join('\\n') + '\\n\\nResponda \"confirmar\" se estiver tudo certo ou \"corrigir <campo>\" para alterar um dado.';\n}\n\nfunction isDraftCommand(value) {\n  return [\n    'gerar',\n    'redigir',\n    'gerar currículo',\n    'gerar curriculo',\n    'criar currículo',\n    'criar curriculo',\n  ].includes(value);\n}\n\nfunction buildResumeDraft() {\n  const lines = [\n    (draft.name || 'Nome não informado').toLocaleUpperCase('pt-BR'),\n    'Contato: ' + formatContact(draft.contact),\n    '',\n    'OBJETIVO',\n    draft.objective || 'Não informado',\n    '',\n    'EXPERIÊNCIA',\n    formatExperiences(),\n    '',\n    'ESCOLARIDADE',\n    draft.education || 'Não informado',\n    '',\n    'CURSOS',\n    formatList(draft.courses),\n    '',\n    'HABILIDADES',\n    formatList(draft.skills),\n  ];\n\n  return lines.join('\\n');\n}\n\nfunction buildDraftReply() {\n  return 'Rascunho atual (modelo determinístico, sem inventar informações):\\n\\n' +\n    draft.generated_resume.text +\n    '\\n\\nResponda \"aprovar\" para continuar ou \"corrigir <campo>\" para voltar à revisão.';\n}\n\nfunction generateDraft() {\n  const resumeText = buildResumeDraft();\n\n  draft.generated_resume = {\n    status: 'preview',\n    method: 'deterministic_template_v1',\n    text: resumeText,\n  };\n  stage = 'draft_ready';\n\n  return 'Rascunho gerado (modelo determinístico, sem inventar informações):\\n\\n' +\n    resumeText +\n    '\\n\\nResponda \"aprovar\" para continuar ou \"corrigir <campo>\" para voltar à revisão.';\n}\n\nfunction isPdfCommand(value) {\n  return [\n    'pdf',\n    'gerar pdf',\n    'gerar currículo em pdf',\n    'gerar curriculo em pdf',\n    'criar pdf',\n    'baixar pdf',\n  ].includes(value);\n}\n\nfunction escapeHtml(value) {\n  return String(value).replace(/[&<>\"']/g, character => ({\n    '&': '&amp;',\n    '<': '&lt;',\n    '>': '&gt;',\n    '\"': '&quot;',\n    \"'\": '&#39;',\n  }[character]));\n}\n\nfunction buildPdfFilename() {\n  const baseName = (draft.name || 'curriculo')\n    .toLocaleLowerCase('pt-BR')\n    .normalize('NFD')\n    .replace(/[\\u0300-\\u036f]/g, '')\n    .replace(/[^a-z0-9]+/g, '-')\n    .replace(/^-+|-+$/g, '') || 'curriculo';\n\n  return baseName + '.pdf';\n}\n\nfunction buildPdfHtml() {\n  const resumeText = draft.generated_resume?.text ?? buildResumeDraft();\n  const escapedText = escapeHtml(resumeText);\n\n  return '<!doctype html><html lang=\"pt-BR\"><head><meta charset=\"utf-8\">' +\n    '<style>body{font-family:Arial,sans-serif;color:#222;margin:48px}pre{font-family:Arial,sans-serif;white-space:pre-wrap;line-height:1.45;font-size:12pt}</style>' +\n    '</head><body><pre>' + escapedText + '</pre></body></html>';\n}\n\nfunction requestPdf() {\n  const html = buildPdfHtml();\n  const filename = buildPdfFilename();\n\n  pdfRequested = true;\n  pdfHtml = html;\n  pdfHtmlBinary = {\n    data: Buffer.from(html, 'utf8').toString('base64'),\n    mimeType: 'text/html',\n    fileName: 'index.html',\n    fileExtension: 'html',\n  };\n  pdfFilename = filename;\n  draft.pdf_status = 'requested';\n  draft.pdf_filename = filename;\n  stage = 'pdf_requested';\n\n  return 'PDF solicitado. A conversão usa o Gotenberg local e será entregue como arquivo.';\n}\n\nfunction askEducation() {\n  stage = 'education';\n  return 'Qual é sua escolaridade? Você pode informar se está estudando ou responder \"pular\".';\n}\n\nfunction askCourses() {\n  stage = 'courses';\n  return 'Você fez algum curso? Informe o nome ou responda \"pular\".';\n}\n\nfunction askSkills() {\n  stage = 'skills';\n  return 'Quais habilidades você quer destacar? Liste-as ou responda \"pular\".';\n}\n\nfunction askReview() {\n  stage = 'review_data';\n  return buildReviewSummary();\n}\n\nfunction finishCollection() {\n  delete draft.review_status;\n  delete draft.pending_review_field;\n  return askReview();\n}\n\nconst experiences = Array.isArray(draft.experiences) ? [...draft.experiences] : [];\nif (Array.isArray(draft.experiencias) && experiences.length === 0) {\n  experiences.push(...draft.experiencias);\n}\ndelete draft.experiencias;\n\nfunction addExperience(description) {\n  experiences.push({\n    id: 'exp-' + (experiences.length + 1),\n    description,\n  });\n  draft.experiences = experiences;\n  delete draft.first_job;\n}\n\nfunction parseReviewField(value) {\n  const match = value.match(/^(?:corrigir|editar|alterar)\\s+(.+)$/);\n\n  if (!match) {\n    return null;\n  }\n\n  return reviewFieldAliases[match[1].trim()] ?? null;\n}\n\nfunction askCorrection(field) {\n  const optionalHint = optionalReviewFields.has(field) ? ' Responda \"pular\" para remover esse campo.' : '';\n  stage = 'review_edit';\n  return 'Qual é o novo valor de ' + reviewFieldLabels[field] + '?' + optionalHint;\n}\n\nfunction completeReviewEdit() {\n  delete draft.pending_review_field;\n  delete draft.review_status;\n  return askReview();\n}\n\nfunction applyReviewEdit(field) {\n  if (isSkipCommand(command)) {\n    if (optionalReviewFields.has(field)) {\n      if (field === 'experiences') {\n        draft.experiences = [];\n        draft.first_job = true;\n      } else {\n        delete draft[field];\n      }\n      return null;\n    }\n\n    return 'Esse campo é obrigatório. Envie um valor válido para ' + reviewFieldLabels[field] + '.';\n  }\n\n  if (field === 'name') {\n    if (!isValidField(text, 120)) {\n      return 'Envie um nome com até 120 caracteres.';\n    }\n\n    draft.name = text;\n    return null;\n  }\n\n  if (field === 'contact') {\n    const normalizedPhone = normalizeBrazilianPhone(text);\n\n    if (isValidEmail(text)) {\n      draft.contact = {\n        type: 'email',\n        value: text,\n        normalized: text.toLocaleLowerCase('pt-BR'),\n      };\n      return null;\n    }\n\n    if (normalizedPhone) {\n      draft.contact = {\n        type: 'phone',\n        value: text,\n        normalized: normalizedPhone,\n      };\n      return null;\n    }\n\n    return 'Não reconheci esse contato. Envie um telefone com DDD ou um e-mail válido.';\n  }\n\n  if (field === 'objective' || field === 'education') {\n    const maximum = field === 'objective' ? 160 : 160;\n\n    if (!isValidField(text, maximum)) {\n      return 'Envie ' + reviewFieldLabels[field] + ' com até ' + maximum + ' caracteres.';\n    }\n\n    draft[field] = text;\n    return null;\n  }\n\n  if (field === 'courses' || field === 'skills') {\n    if (!isValidField(text, 300)) {\n      return 'Envie ' + reviewFieldLabels[field] + ' com até 300 caracteres.';\n    }\n\n    draft[field] = [text];\n    return null;\n  }\n\n  if (field === 'experiences') {\n    if (!isValidExperience(text)) {\n      return 'Envie uma experiência com pelo menos 5 caracteres e até 1000 caracteres.';\n    }\n\n    draft.experiences = [{\n      id: 'exp-1',\n      description: text,\n    }];\n    delete draft.first_job;\n    return null;\n  }\n\n  return 'Não reconheci o campo para correção.';\n}\n\nlet pdfRequested = false;\nlet pdfHtml = null;\nlet pdfHtmlBinary = null;\nlet pdfFilename = null;\n\nlet reply = 'Responda com seu nome para continuar.';\n\nif (stage === 'start') {\n  stage = 'name';\n  reply = 'Oi! Qual nome deve aparecer no currículo?';\n} else if (stage === 'name') {\n  if (text.length > 0 && text.length <= 120) {\n    draft.name = text;\n    stage = 'contact';\n    reply = 'Qual telefone ou e-mail você quer colocar no currículo?';\n  } else {\n    reply = 'Envie um nome com até 120 caracteres para continuar.';\n  }\n} else if (stage === 'contact') {\n  const normalizedPhone = normalizeBrazilianPhone(text);\n\n  if (isValidEmail(text)) {\n    draft.contact = {\n      type: 'email',\n      value: text,\n      normalized: text.toLocaleLowerCase('pt-BR'),\n    };\n    stage = 'objective';\n    reply = 'Que tipo de trabalho você procura? Se preferir, responda \"pular\".';\n  } else if (normalizedPhone) {\n    draft.contact = {\n      type: 'phone',\n      value: text,\n      normalized: normalizedPhone,\n    };\n    stage = 'objective';\n    reply = 'Que tipo de trabalho você procura? Se preferir, responda \"pular\".';\n  } else {\n    reply = 'Não reconheci esse contato. Envie um telefone com DDD ou um e-mail válido.';\n  }\n} else if (stage === 'objective') {\n  if (command === 'pular') {\n    delete draft.objective;\n    stage = 'experience';\n    reply = 'Você já trabalhou, fez algum bico ou ajudou em um negócio da família? Conte o que fazia ou responda \"primeiro emprego\".';\n  } else if (isValidField(text, 160)) {\n    draft.objective = text;\n    stage = 'experience';\n    reply = 'Você já trabalhou, fez algum bico ou ajudou em um negócio da família? Conte o que fazia ou responda \"primeiro emprego\".';\n  } else {\n    reply = 'Descreva o objetivo em até 160 caracteres ou responda \"pular\".';\n  }\n} else if (stage === 'experience') {\n  if (command === 'primeiro emprego' || command === 'pular') {\n    draft.experiences = experiences;\n    draft.first_job = true;\n    reply = askEducation();\n  } else if (isValidExperience(text)) {\n    addExperience(text);\n    stage = 'experience_more';\n    reply = 'Quer adicionar outra experiência? Responda \"sim\" ou \"não\".';\n  } else {\n    reply = 'Conte uma experiência com pelo menos 5 caracteres, ou responda \"primeiro emprego\".';\n  }\n} else if (stage === 'experience_more') {\n  if (command === 'sim' || command === 'adicionar' || command === 'adicionar outra') {\n    stage = 'experience_additional';\n    reply = 'Conte outra experiência: o que você fazia?';\n  } else if (command === 'não' || command === 'nao' || command === 'pular') {\n    reply = askEducation();\n  } else {\n    reply = 'Responda \"sim\" para adicionar outra experiência ou \"não\" para continuar.';\n  }\n} else if (stage === 'experience_additional') {\n  if (command === 'não' || command === 'nao' || command === 'pular') {\n    reply = askEducation();\n  } else if (isValidExperience(text)) {\n    addExperience(text);\n    stage = 'experience_more';\n    reply = 'Quer adicionar outra experiência? Responda \"sim\" ou \"não\".';\n  } else {\n    reply = 'Conte uma experiência com pelo menos 5 caracteres, ou responda \"não\" para continuar.';\n  }\n} else if (stage === 'education') {\n  if (isSkipCommand(command)) {\n    delete draft.education;\n    reply = askCourses();\n  } else if (isValidField(text, 160)) {\n    draft.education = text;\n    reply = askCourses();\n  } else {\n    reply = 'Informe sua escolaridade em até 160 caracteres ou responda \"pular\".';\n  }\n} else if (stage === 'courses') {\n  if (isSkipCommand(command)) {\n    delete draft.courses;\n    reply = askSkills();\n  } else if (isValidField(text, 300)) {\n    draft.courses = [text];\n    reply = askSkills();\n  } else {\n    reply = 'Informe o curso em até 300 caracteres ou responda \"pular\".';\n  }\n} else if (stage === 'skills') {\n  if (isSkipCommand(command)) {\n    delete draft.skills;\n    reply = finishCollection();\n  } else if (isValidField(text, 300)) {\n    draft.skills = [text];\n    reply = finishCollection();\n  } else {\n    reply = 'Informe suas habilidades em até 300 caracteres ou responda \"pular\".';\n  }\n} else if (stage === 'review_data') {\n  const requestedField = parseReviewField(command);\n\n  if (command === 'confirmar' || command === 'confirmado' || command === 'sim' || command === 'ok') {\n    draft.review_status = 'confirmed';\n    delete draft.pending_review_field;\n    stage = 'ready_for_drafting';\n    reply = 'Dados confirmados. O currículo está pronto para a próxima etapa de redação.';\n  } else if (requestedField) {\n    delete draft.review_status;\n    draft.pending_review_field = requestedField;\n    reply = askCorrection(requestedField);\n  } else {\n    reply = buildReviewSummary();\n  }\n} else if (stage === 'review_edit') {\n  const pendingField = draft.pending_review_field;\n\n  if (!pendingField) {\n    reply = askReview();\n  } else if (command === 'cancelar' || command === 'voltar') {\n    delete draft.pending_review_field;\n    reply = askReview();\n  } else {\n    const editError = applyReviewEdit(pendingField);\n\n    if (editError) {\n      reply = editError;\n    } else {\n      reply = completeReviewEdit();\n    }\n  }\n} else if (stage === 'ready_for_drafting') {\n  const requestedField = parseReviewField(command);\n\n  if (requestedField) {\n    delete draft.review_status;\n    draft.pending_review_field = requestedField;\n    reply = askCorrection(requestedField);\n  } else if (isDraftCommand(command)) {\n    reply = generateDraft();\n  } else {\n    reply = 'Dados confirmados. Responda \"gerar currículo\" para criar o rascunho.';\n  }\n} else if (stage === 'draft_ready') {\n  const requestedField = parseReviewField(command);\n\n  if (command === 'aprovar' || command === 'aprovado' || command === 'confirmar') {\n    draft.generated_resume.status = 'approved';\n    stage = 'draft_approved';\n    reply = 'Rascunho aprovado. Ele está pronto para a próxima etapa de PDF.';\n  } else if (requestedField) {\n    delete draft.generated_resume;\n    delete draft.review_status;\n    draft.pending_review_field = requestedField;\n    reply = askCorrection(requestedField);\n  } else if (isDraftCommand(command)) {\n    reply = generateDraft();\n  } else {\n    reply = buildDraftReply();\n  }\n} else if (stage === 'draft_approved') {\n  const requestedField = parseReviewField(command);\n\n  if (isPdfCommand(command)) {\n    reply = requestPdf();\n  } else if (requestedField) {\n    delete draft.generated_resume;\n    delete draft.review_status;\n    draft.pending_review_field = requestedField;\n    reply = askCorrection(requestedField);\n  } else {\n    reply = 'Rascunho aprovado. Responda \"gerar PDF\" para solicitar o arquivo.';\n  }\n} else if (stage === 'pdf_requested') {\n  if (isPdfCommand(command)) {\n    reply = requestPdf();\n  } else {\n    reply = 'O PDF já foi solicitado. Aguarde a conversão pelo Gotenberg local.';\n  }\n} else {\n  reply = 'Não consegui identificar a etapa atual. Tente novamente.';\n}\n\nconst output = {\n  json: {\n    sender_id: input.sender_id,\n    stage,\n    draft,\n    revision: $json.revision,\n    reply,\n    pdf_requested: pdfRequested,\n    pdf_html: pdfHtml,\n    pdf_filename: pdfFilename,\n  },\n};\n\nif (pdfHtmlBinary) {\n  output.binary = {\n    pdf_html_file: pdfHtmlBinary,\n  };\n}\n\nreturn output;"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        592,
-        0
-      ],
-      "id": "53b711a1-47a2-433e-80bd-cd91aded0102",
-      "name": "Process Conversation"
     },
     {
       "id": "646461e9-f901-4492-a02f-ed2c7ad001b4",
@@ -152,21 +168,118 @@
       }
     },
     {
+      "id": "a3e9d744-1c6a-4ed7-b9a6-cf4e352ac2a1",
+      "name": "Mark PDF Stored",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1488,
+        224
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $input.item.json;\nconst draft = { ...(input.draft ?? {}) };\nconst binary = $input.item.binary?.data;\nconst storagePath = draft.pdf_storage_path;\n\nif (!storagePath || !binary) {\n  throw new Error('PDF binário ou identificador de armazenamento ausente.');\n}\n\nconst pdfBuffer = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst pdfBase64 = pdfBuffer.toString('base64');\nconst sizeBytes = pdfBuffer.length;\n\ndraft.pdf_status = 'stored';\ndraft.pdf_mime_type = binary.mimeType ?? 'application/pdf';\ndraft.pdf_size_bytes = sizeBytes;\ndraft.pdf_stored_at = new Date().toISOString();\n\nreturn {\n  json: {\n    ...input,\n    draft,\n    pdf_base64: pdfBase64,\n    reply: 'PDF armazenado no PostgreSQL local como ' + storagePath + '.',\n  },\n  binary: $input.item.binary,\n};"
+      }
+    },
+    {
+      "id": "d7f0b2a4-0df5-4a5e-a6e5-9c2e97b5b3f4",
+      "name": "Save PDF Metadata",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        1968,
+        224
+      ],
       "parameters": {
         "operation": "executeQuery",
         "query": "INSERT INTO sessions (sender_id, stage, draft, revision)\nVALUES ($1, $2, $3::jsonb, $4)\nON CONFLICT (sender_id) DO UPDATE SET\n  stage = EXCLUDED.stage,\n  draft = EXCLUDED.draft,\n  revision = EXCLUDED.revision,\n  updated_at = now()\nRETURNING stage, draft, revision, $5::text AS response;",
         "options": {
           "queryReplacement": "={{ [$json.sender_id, $json.stage, JSON.stringify($json.draft), $json.revision, $json.reply] }}"
         }
-      },
+      }
+    },
+    {
+      "id": "2f2d6ee7-7ec9-4ad5-86ec-6f1d34c3f9bf",
+      "name": "Save PDF Artifact",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.8,
       "position": [
-        784,
-        0
+        1728,
+        224
       ],
-      "id": "7bc3fefc-feec-47e8-a974-5744c67b15e3",
-      "name": "Save Session"
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "CREATE TABLE IF NOT EXISTS resume_artifacts (\n  artifact_id text PRIMARY KEY,\n  sender_id text NOT NULL,\n  file_name text NOT NULL,\n  mime_type text NOT NULL,\n  content_bytes bytea NOT NULL,\n  created_at timestamptz NOT NULL DEFAULT now()\n);\n\nINSERT INTO resume_artifacts (\n  artifact_id, sender_id, file_name, mime_type, content_bytes\n)\nVALUES ($1, $2, $3, $4, decode($5, 'base64'))\nON CONFLICT (artifact_id) DO UPDATE SET\n  file_name = EXCLUDED.file_name,\n  mime_type = EXCLUDED.mime_type,\n  content_bytes = EXCLUDED.content_bytes,\n  created_at = now()\nRETURNING\n  artifact_id,\n  $6::text AS sender_id,\n  $7::text AS stage,\n  ($8::jsonb || jsonb_build_object('pdf_size_bytes', octet_length(content_bytes))) AS draft,\n  $9::integer AS revision,\n  $10::text AS reply,\n  $10::text AS response,\n  octet_length(content_bytes) AS pdf_size_bytes;",
+        "options": {
+          "queryReplacement": "={{ [$json.draft.pdf_artifact_id, $json.sender_id, $json.draft.pdf_filename, $json.draft.pdf_mime_type, $json.pdf_base64, $json.sender_id, $json.stage, JSON.stringify($json.draft), $json.revision, $json.reply] }}"
+        }
+      }
+    },
+    {
+      "id": "8f2a9dc8-2f0b-4e8f-9c92-2fce2e7b8a11",
+      "name": "Check PDF Retrieval",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        784,
+        448
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.pdf_retrieval_requested }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {
+          "ignoreCase": true
+        }
+      }
+    },
+    {
+      "id": "d4fa4f7a-7ed4-4e08-a7c0-6e0d1b7d8f3a",
+      "name": "Load PDF Artifact",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        1024,
+        448
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH artifact AS (\n  SELECT\n    artifact_id,\n    file_name,\n    mime_type,\n    encode(content_bytes, 'base64') AS content_base64,\n    octet_length(content_bytes) AS size_bytes\n  FROM resume_artifacts\n  WHERE artifact_id = $1\n    AND sender_id = $2\n)\nSELECT\n  $1::text AS requested_artifact_id,\n  $2::text AS sender_id,\n  artifact.artifact_id,\n  artifact.file_name,\n  artifact.mime_type,\n  artifact.content_base64,\n  artifact.size_bytes\nFROM (SELECT 1) AS request\nLEFT JOIN artifact ON TRUE;",
+        "options": {
+          "queryReplacement": "={{ [$json.pdf_artifact_id, $json.sender_id] }}"
+        }
+      }
+    },
+    {
+      "id": "f7bfc7dd-35ec-4a75-9c4a-d1392da45d83",
+      "name": "Prepare PDF Download",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1248,
+        448
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $input.item.json;\nconst artifactId = input.artifact_id ?? input.requested_artifact_id;\n\nif (!input.artifact_id || !input.content_base64) {\n  return {\n    json: {\n      sender_id: input.sender_id,\n      pdf_artifact_id: artifactId,\n      pdf_found: false,\n      reply: 'Não encontrei um PDF armazenado para esta sessão.',\n    },\n  };\n}\n\nconst fileName = input.file_name || 'curriculo.pdf';\nconst fileExtension = fileName.split('.').pop() || 'pdf';\nconst sizeBytes = Number(input.size_bytes ?? 0);\n\nreturn {\n  json: {\n    sender_id: input.sender_id,\n    pdf_artifact_id: input.artifact_id,\n    pdf_filename: fileName,\n    pdf_mime_type: input.mime_type || 'application/pdf',\n    pdf_size_bytes: Number.isFinite(sizeBytes) ? sizeBytes : null,\n    pdf_found: true,\n    reply: 'PDF recuperado do armazenamento local.',\n  },\n  binary: {\n    data: {\n      data: input.content_base64,\n      mimeType: input.mime_type || 'application/pdf',\n      fileName,\n      fileExtension,\n      fileSize: Number.isFinite(sizeBytes) ? String(sizeBytes) : undefined,\n    },\n  },\n};"
+      }
     }
   ],
   "connections": {
@@ -215,6 +328,11 @@
             "node": "Check PDF Request",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Check PDF Retrieval",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -229,16 +347,67 @@
           }
         ]
       ]
+    },
+    "Convert PDF with Gotenberg": {
+      "main": [
+        [
+          {
+            "node": "Mark PDF Stored",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark PDF Stored": {
+      "main": [
+        [
+          {
+            "node": "Save PDF Artifact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save PDF Artifact": {
+      "main": [
+        [
+          {
+            "node": "Save PDF Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check PDF Retrieval": {
+      "main": [
+        [
+          {
+            "node": "Load PDF Artifact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load PDF Artifact": {
+      "main": [
+        [
+          {
+            "node": "Prepare PDF Download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "active": false,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate",
     "availableInMCP": true
   },
-  "versionId": "5f8a84c2-71bd-419e-a6af-db5e5e581cd4",
-  "nodeGroups": [],
-  "id": "cys1lKVvdyjMlcVL",
-  "tags": []
+  "nodeGroups": []
 }
