@@ -765,3 +765,11 @@ Definir o contrato do primeiro canal real e implementar somente após aprovaçã
 ### Próxima etapa
 
 Definir o contrato do primeiro canal real e implementar somente após aprovação explícita; o adaptador atual continua em modo simulado.
+
+## Canal temporario Hosted Chat - implementado em 2026-11-17
+
+- Criado o export sanitizado `workflows/chat-entrypoint.json`.
+- O fluxo normaliza `chatInput` e `sessionId`, chama o `local-service` interno e formata a resposta em `output`.
+- O workflow esta inativo por padrao. Antes de ativar, e necessario configurar HTTPS, a URL publica base do n8n e uma credencial Basic Auth exclusiva para os testadores.
+- O fluxo nao possui nodes de WhatsApp, e-mail, Telegram ou qualquer outro envio externo.
+- A validacao completa depende da instancia n8n em execucao e da credencial manual; o JSON foi validado estruturalmente localmente.

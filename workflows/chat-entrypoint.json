@@ -1,0 +1,128 @@
+{
+  "name": "chat-entrypoint",
+  "nodes": [
+    {
+      "parameters": {
+        "public": true,
+        "mode": "hostedChat",
+        "authentication": "basicAuth",
+        "options": {
+          "allowedOrigins": "*",
+          "responseMode": "lastNode"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ],
+      "id": "6c0cf5c0-8e76-4e48-a1fd-0b1c30a5c3e1",
+      "name": "Hosted Chat Trigger"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const input = $input.item.json;\nconst sessionId = String(input.sessionId ?? input.session_id ?? '').trim();\nconst chatInput = String(input.chatInput ?? input.text ?? '').trim();\n\nif (!sessionId) {\n  throw new Error('O Chat Trigger não forneceu sessionId.');\n}\n\nif (!chatInput) {\n  throw new Error('A mensagem do Hosted Chat está vazia.');\n}\n\nreturn {\n  json: {\n    sender_id: `chat:${sessionId}`,\n    message_id: `chat-${sessionId}-${Date.now()}`,\n    text: chatInput,\n  },\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ],
+      "id": "4cb2dc86-21c1-4b08-8a44-f3f30d570df1",
+      "name": "Normalize Chat Message"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/curriculo-dev",
+        "authentication": "none",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ sender_id: $json.sender_id, message_id: $json.message_id, text: $json.text }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        720,
+        300
+      ],
+      "id": "07de4c7c-4c9d-47f9-9c7c-e14d28e5a1f9",
+      "name": "Call Local Service"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const raw = $input.item.json;\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\nconst statusCode = Number(raw.statusCode ?? 200);\nconst response = String(body.response ?? body.reply ?? 'Não foi possível obter uma resposta do serviço.');\nconst dryRun = body.delivery_mode === 'dry_run' || body.delivery_payload?.mode === 'dry_run';\n\nreturn {\n  json: {\n    output: dryRun ? `${response} (dry_run: nenhum envio externo foi realizado.)` : response,\n    status_code: statusCode,\n    delivery_mode: dryRun ? 'dry_run' : null,\n    send_attempted: body.send_attempted === true,\n  },\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        300
+      ],
+      "id": "db8a460c-c1ea-4d76-a9b5-f2d6b1a3ce20",
+      "name": "Format Chat Response"
+    }
+  ],
+  "connections": {
+    "Hosted Chat Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Chat Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Chat Message": {
+      "main": [
+        [
+          {
+            "node": "Call Local Service",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Local Service": {
+      "main": [
+        [
+          {
+            "node": "Format Chat Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "versionId": "chat-entrypoint-draft",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "pinData": {},
+  "tags": []
+}

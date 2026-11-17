@@ -210,3 +210,12 @@ Este arquivo registra decisões que outra sessão precisa conhecer para retomar 
 - A conversa publicada terminou com `delivery_status=ready` e sem `download_token`. A collection `curriculo` passou com 5 requests e 7 asserções.
 - A saída versionada em `workflows/service.json` foi regenerada a partir do export da versão publicada, removendo credenciais, `pinData` e `webhookId`.
 - O envio para WhatsApp, Telegram, e-mail ou qualquer canal real continua fora do escopo até uma solicitação explícita.
+
+## 2026-11-17 - Entrada temporaria pelo Hosted Chat
+
+- O workflow separado `chat-entrypoint` usa o Chat Trigger em modo `hostedChat` e permanece inativo ate a validacao manual.
+- A autenticacao configurada e Basic Auth; a credencial exclusiva para testadores deve ser criada na interface e nao entra no export versionado.
+- `sessionId` e convertido em `sender_id` com o prefixo `chat:`. Assim, cada conversa do Hosted Chat preserva seu estado no mesmo contrato do `local-service`, sem compartilhar sessoes entre usuarios.
+- O adaptador chama somente `POST /webhook/curriculo-dev` e devolve o campo `output` exigido pelo Chat Trigger.
+- Quando a resposta do servico contem `delivery_mode=dry_run`, o adaptador deixa essa limitacao explicita ao testador e nao realiza envio externo.
+- A URL publica HTTPS, a URL base do n8n e a credencial Basic Auth continuam sendo configuracoes manuais da instancia.
